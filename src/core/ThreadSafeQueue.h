@@ -14,14 +14,15 @@
 template <typename T>
 class ThreadSafeQueue {
 public:
-    void push(T value) {
+    bool push(T value) {
         {
             std::lock_guard lock(m_mutex);
-            if (m_closed) return;
+            if (m_closed) return false;
 
             m_queue.push(std::move(value));
         }
         m_cv.notify_one();
+        return true;
     }
 
     // Blocks until an item is available or the queue is closed.

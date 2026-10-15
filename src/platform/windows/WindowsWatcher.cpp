@@ -13,11 +13,10 @@ WindowsWatcher::WindowsWatcher(std::string dir_path)
 
 std::expected<void, std::error_code> WindowsWatcher::start(EventCallback onEvent, std::stop_token stop)
 {
-    // --- 1. Memory Lifetime: Must outlive handles (destroyed last) ---
+    // Must outlive handles (destroyed last)
     alignas(DWORD) std::array<std::byte, 64 * 1024> buffer{};
     OVERLAPPED ov{};
 
-    // --- 2. Directory Handle (with FILE_FLAG_OVERLAPPED) ---
     const HANDLE rawDirHandle = CreateFileA(
         m_dir_path.c_str(),
         FILE_LIST_DIRECTORY,
@@ -33,8 +32,6 @@ std::expected<void, std::error_code> WindowsWatcher::start(EventCallback onEvent
     }
     const UniqueHandle hDir{rawDirHandle};
 
-    // --- 3. Synchronization Events (Manual-reset) ---
-    // Note: CreateEventW returns NULL (0) on failure, NOT INVALID_HANDLE_VALUE.
     const HANDLE rawIoEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!rawIoEvent) {
         return std::unexpected(std::error_code(GetLastError(), std::system_category()));
@@ -47,12 +44,10 @@ std::expected<void, std::error_code> WindowsWatcher::start(EventCallback onEvent
     }
     const UniqueHandle stopEvent{rawStopEvent};
 
-    // Tie the OVERLAPPED struct to our I/O completion event
     ov.hEvent = ioEvent.get();
 
     // When a stop is requested, signal the stop event.
-    // Unlike CancelIoEx, SetEvent stays signaled and will never miss the thread.
-    std::stop_callback onStop(stop, [&] {
+    std::stop_callback onStop(stop, [&stopEvent] {
         SetEvent(stopEvent.get());
     });
 
@@ -74,8 +69,6 @@ std::expected<void, std::error_code> WindowsWatcher::start(EventCallback onEvent
         ov.OffsetHigh = 0;
         ov.Pointer = nullptr;
 
-        // Issue asynchronous directory read.
-        // Important: lpBytesReturned MUST be nullptr when lpOverlapped is provided.
         const BOOL readOk = ReadDirectoryChangesW(
             hDir.get(),
             buffer.data(),
@@ -88,8 +81,7 @@ std::expected<void, std::error_code> WindowsWatcher::start(EventCallback onEvent
         );
 
         if (!readOk) {
-            const DWORD err = GetLastError();
-            if (err != ERROR_IO_PENDING) {
+            if (const DWORD err = GetLastError(); err != ERROR_IO_PENDING) {
                 std::cerr << "ReadDirectoryChangesW failed: " << err << "\n";
                 return std::unexpected(std::error_code(err, std::system_category()));
             }
@@ -105,7 +97,6 @@ std::expected<void, std::error_code> WindowsWatcher::start(EventCallback onEvent
         );
 
         if (waitResult == WAIT_OBJECT_0) {
-            // --- I/O Event Fired: Changes detected ---
             DWORD bytesReturned = 0;
             if (!GetOverlappedResult(hDir.get(), &ov, &bytesReturned, FALSE)) {
                 const DWORD err = GetLastError();
@@ -125,12 +116,11 @@ std::expected<void, std::error_code> WindowsWatcher::start(EventCallback onEvent
             ProcessEvents(onEvent, fni);
         }
         else if (waitResult == WAIT_OBJECT_0 + 1) {
-            // --- Stop Event Fired: User requested exit ---
-            // 1. Tell Windows to cancel the outstanding read
+            // Tell Windows to cancel the outstanding read
             CancelIoEx(hDir.get(), &ov);
 
-            // 2. Wait (bWait = TRUE) until Windows confirms cancellation.
-            //    This guarantees the kernel is completely done with `buffer` and `ov`.
+            // Wait (bWait = TRUE) until Windows confirms cancellation.
+            // This guarantees the kernel is completely done with buffer and ov.
             DWORD dummyBytes = 0;
             GetOverlappedResult(hDir.get(), &ov, &dummyBytes, TRUE);
 
