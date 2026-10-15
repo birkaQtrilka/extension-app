@@ -16,43 +16,43 @@ class ThreadSafeQueue {
 public:
     void push(T value) {
         {
-            std::lock_guard lock(mutex_);
-            if (closed_) return;
+            std::lock_guard lock(m_mutex);
+            if (m_closed) return;
 
-            queue_.push(std::move(value));
+            m_queue.push(std::move(value));
         }
-        cv_.notify_one();
+        m_cv.notify_one();
     }
 
     // Blocks until an item is available or the queue is closed.
     // Returns nullopt when closed and empty.
     std::optional<T> pop() {
-        std::unique_lock lock(mutex_);
+        std::unique_lock lock(m_mutex);
 
-        cv_.wait(lock, [this] {
-            return closed_ || !queue_.empty();
+        m_cv.wait(lock, [this] {
+            return m_closed || !m_queue.empty();
         });
 
-        if (queue_.empty()) return std::nullopt;
+        if (m_queue.empty()) return std::nullopt;
 
-        T value = std::move(queue_.front());
-        queue_.pop();
+        T value = std::move(m_queue.front());
+        m_queue.pop();
         return value;
     }
 
     void close() {
         {
-            std::lock_guard lock(mutex_);
-            closed_ = true;
+            std::lock_guard lock(m_mutex);
+            m_closed = true;
         }
-        cv_.notify_all();
+        m_cv.notify_all();
     }
 
 private:
-    std::mutex mutex_;
-    std::condition_variable cv_;
-    std::queue<T> queue_;
-    bool closed_ = false;
+    std::mutex m_mutex;
+    std::condition_variable m_cv;
+    std::queue<T> m_queue;
+    bool m_closed = false;
 };
 
 #endif //THREADSAFEQUEUE_H

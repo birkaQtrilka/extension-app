@@ -29,9 +29,13 @@ int main() {
     ThreadSafeQueue<FileEvent> actions_queue;
 
     std::jthread producer_thread ([&](std::stop_token token) {
-        watcher.start([&actions_queue](const FileEvent& event) {
+        auto expect = watcher.start([&actions_queue](const FileEvent& event) {
             actions_queue.push(event);
         }, std::move(token));
+        if (!expect) {
+            std::cout << expect.error() << std::endl;
+            actions_queue.close();
+        }
     });
 
     std::jthread consumer_thread([&](std::stop_token token) {

@@ -1,74 +1,144 @@
 #include "WindowsWatcher.h"
 
+#include <array>
 #include <iostream>
 #include <utility>
 #include <windows.h>
 #include "HandleCloser.h"
 
-WindowsWatcher::WindowsWatcher(std::string  dir_path)
+WindowsWatcher::WindowsWatcher(std::string dir_path)
     : m_dir_path(std::move(dir_path))
 {
 }
 
 std::expected<void, std::error_code> WindowsWatcher::start(EventCallback onEvent, std::stop_token stop)
 {
-    const HANDLE rawHandle = CreateFileA(
-            m_dir_path.c_str(),
-            FILE_LIST_DIRECTORY,
-            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-            nullptr,
-            OPEN_EXISTING,
-            FILE_FLAG_BACKUP_SEMANTICS,
-            nullptr
-        );
-
-    if (rawHandle == INVALID_HANDLE_VALUE) {
-        const auto error = GetLastError();
-        return std::unexpected(
-            std::error_code(error, std::system_category())
-        );
-    }
-    UniqueHandle hDir{rawHandle};
-
+    // --- 1. Memory Lifetime: Must outlive handles (destroyed last) ---
     alignas(DWORD) std::array<std::byte, 64 * 1024> buffer{};
-    DWORD bytesReturned = 0;
+    OVERLAPPED ov{};
+
+    // --- 2. Directory Handle (with FILE_FLAG_OVERLAPPED) ---
+    const HANDLE rawDirHandle = CreateFileA(
+        m_dir_path.c_str(),
+        FILE_LIST_DIRECTORY,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr,
+        OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED,
+        nullptr
+    );
+
+    if (rawDirHandle == INVALID_HANDLE_VALUE) {
+        return std::unexpected(std::error_code(GetLastError(), std::system_category()));
+    }
+    const UniqueHandle hDir{rawDirHandle};
+
+    // --- 3. Synchronization Events (Manual-reset) ---
+    // Note: CreateEventW returns NULL (0) on failure, NOT INVALID_HANDLE_VALUE.
+    const HANDLE rawIoEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!rawIoEvent) {
+        return std::unexpected(std::error_code(GetLastError(), std::system_category()));
+    }
+    const UniqueHandle ioEvent{rawIoEvent};
+
+    const HANDLE rawStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!rawStopEvent) {
+        return std::unexpected(std::error_code(GetLastError(), std::system_category()));
+    }
+    const UniqueHandle stopEvent{rawStopEvent};
+
+    // Tie the OVERLAPPED struct to our I/O completion event
+    ov.hEvent = ioEvent.get();
+
+    // When a stop is requested, signal the stop event.
+    // Unlike CancelIoEx, SetEvent stays signaled and will never miss the thread.
+    std::stop_callback onStop(stop, [&] {
+        SetEvent(stopEvent.get());
+    });
+
+    constexpr DWORD filter = FILE_NOTIFY_CHANGE_FILE_NAME |
+                             FILE_NOTIFY_CHANGE_DIR_NAME |
+                             FILE_NOTIFY_CHANGE_ATTRIBUTES |
+                             FILE_NOTIFY_CHANGE_SIZE |
+                             FILE_NOTIFY_CHANGE_LAST_WRITE |
+                             FILE_NOTIFY_CHANGE_CREATION;
 
     std::cout << "Watching directory: " << m_dir_path << "\n";
-    std::stop_callback onStop(stop, [&] { CancelIoEx(hDir.get(), nullptr); });
 
     while (!stop.stop_requested()) {
+        // Reset the manual-reset I/O event and OVERLAPPED internal state
+        ResetEvent(ioEvent.get());
+        ov.Internal = 0;
+        ov.InternalHigh = 0;
+        ov.Offset = 0;
+        ov.OffsetHigh = 0;
+        ov.Pointer = nullptr;
 
-        // Read directory changes
-        if (ReadDirectoryChangesW(
+        // Issue asynchronous directory read.
+        // Important: lpBytesReturned MUST be nullptr when lpOverlapped is provided.
+        const BOOL readOk = ReadDirectoryChangesW(
             hDir.get(),
             buffer.data(),
-            buffer.size(),
+            static_cast<DWORD>(buffer.size()),
             TRUE, // watch subdirectories
-            FILE_NOTIFY_CHANGE_FILE_NAME |
-            FILE_NOTIFY_CHANGE_DIR_NAME |
-            FILE_NOTIFY_CHANGE_ATTRIBUTES |
-            FILE_NOTIFY_CHANGE_SIZE |
-            FILE_NOTIFY_CHANGE_LAST_WRITE |
-            FILE_NOTIFY_CHANGE_CREATION,
-            &bytesReturned,
+            filter,
             nullptr,
+            &ov,
             nullptr
-        )) {
+        );
+
+        if (!readOk) {
+            const DWORD err = GetLastError();
+            if (err != ERROR_IO_PENDING) {
+                std::cerr << "ReadDirectoryChangesW failed: " << err << "\n";
+                return std::unexpected(std::error_code(err, std::system_category()));
+            }
+        }
+
+        // Wait for either: [0] I/O to finish, or [1] Stop requested
+        HANDLE waitHandles[] = { ioEvent.get(), stopEvent.get() };
+        const DWORD waitResult = WaitForMultipleObjects(
+            static_cast<DWORD>(std::size(waitHandles)),
+            waitHandles,
+            FALSE, // Wake on ANY event
+            INFINITE
+        );
+
+        if (waitResult == WAIT_OBJECT_0) {
+            // --- I/O Event Fired: Changes detected ---
+            DWORD bytesReturned = 0;
+            if (!GetOverlappedResult(hDir.get(), &ov, &bytesReturned, FALSE)) {
+                const DWORD err = GetLastError();
+                if (err == ERROR_OPERATION_ABORTED) {
+                    break;
+                }
+                std::cerr << "GetOverlappedResult failed: " << err << "\n";
+                return std::unexpected(std::error_code(err, std::system_category()));
+            }
+
             if (bytesReturned == 0) {
                 std::cerr << "Buffer overflow! Some events were lost. Full rescan needed.\n";
-                // Optionally push a special "Rescan" event to the queue here
                 continue;
             }
+
             auto* fni = reinterpret_cast<FILE_NOTIFY_INFORMATION*>(buffer.data());
             ProcessEvents(onEvent, fni);
+        }
+        else if (waitResult == WAIT_OBJECT_0 + 1) {
+            // --- Stop Event Fired: User requested exit ---
+            // 1. Tell Windows to cancel the outstanding read
+            CancelIoEx(hDir.get(), &ov);
 
-        } else {
+            // 2. Wait (bWait = TRUE) until Windows confirms cancellation.
+            //    This guarantees the kernel is completely done with `buffer` and `ov`.
+            DWORD dummyBytes = 0;
+            GetOverlappedResult(hDir.get(), &ov, &dummyBytes, TRUE);
+
+            break;
+        }
+        else {
             const DWORD err = GetLastError();
-            if (err == ERROR_OPERATION_ABORTED) {
-                // Not an error! The stop token cancelled the I/O cleanly.
-                break;
-            }
-            std::cerr << "ReadDirectoryChangesW failed: " << err << "\n";
+            std::cerr << "WaitForMultipleObjects failed: " << err << "\n";
             return std::unexpected(std::error_code(err, std::system_category()));
         }
     }
@@ -99,7 +169,6 @@ void WindowsWatcher::ProcessEvents(const EventCallback& onEvent, FILE_NOTIFY_INF
                     m_old_name_for_rename.clear(); // Reset for safety
                 } else {
                     // Edge case: A file was moved INTO the watched directory from somewhere else.
-                    // Windows only gives us NEW_NAME. We should treat it as a Creation.
                     onEvent(Created{wFileName});
                 }
             break;
