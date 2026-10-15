@@ -3,6 +3,7 @@
 #include <string>
 #include <variant>
 #include "src/core/FileEvent.h"
+#include "src/platform/cross/WindowsWatcher.h"
 
 // TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
 // click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
@@ -18,27 +19,15 @@ std::string describe(const FileEvent& event) {
         [](const Renamed& e) { return "Modified: from" + e.from.string() + "to " + e.to.string(); },
     }, event);
 }
-
+void describe2(const FileEvent& event) {
+    std::cout << describe(event) << std::endl;
+}
 int main() {
-    // TIP Press <shortcut actionId="RenameElement"/> when your caret is at the
-    // <b>lang</b> variable name to see how CLion can help you rename it.
     auto lang = "C++";
     std::cout << "Hello and welcome to " << lang << "!\n";
-    std::optional<FileEvent> instr;
-    std::string command;
-    std::cin >> command;
-
-    if (command == "created") {
-        instr = Created{"file.txt"};
-    } else if (command == "modified") {
-        instr = Renamed{"file.txt", "file2.txt"};
-    }
-    if (instr.has_value()) {
-        std::cout << describe(instr.value());
-    }
-    else {
-        std::cout << "No recognized instruction\n";
-    }
+    WindowsWatcher watcher("C:/Saxion/Courses/C++/Testing");
+    auto token = std::stop_token();
+    watcher.start(describe2, token);
 
     return 0;
 }

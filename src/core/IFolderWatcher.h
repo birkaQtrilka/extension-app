@@ -4,13 +4,17 @@
 
 #ifndef IFOLDERWATCHER_H
 #define IFOLDERWATCHER_H
+#include <functional>
 #include <stop_token>
+
+#include "FileEvent.h"
 
 
 class IFolderWatcher {
 public:
     virtual ~IFolderWatcher() = default;
-    virtual void start(std::stop_token stop) = 0;
+    using EventCallback = std::function<void(FileEvent)>;
+    virtual void start(EventCallback onEvent, std::stop_token stop) = 0;
 };
 
 
