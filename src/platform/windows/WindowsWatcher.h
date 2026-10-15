@@ -11,13 +11,15 @@
 class WindowsWatcher final : public IFolderWatcher {
 public:
     explicit WindowsWatcher(std::string dir_path);
-    void start(EventCallback onEvent, std::stop_token stop) override;
+    std::expected<void, std::error_code> start(EventCallback onEvent, std::stop_token stop) override;
 
-    static void ProcessEvents(const EventCallback &onEvent, FILE_NOTIFY_INFORMATION *info);
+    void ProcessEvents(const EventCallback &onEvent, FILE_NOTIFY_INFORMATION *info);
 
 private:
     std::string m_dir_path;
+    std::wstring m_old_name_for_rename;
 };
+
 
 
 

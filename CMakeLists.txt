@@ -7,5 +7,7 @@ add_executable(extension_app main.cpp
         src/core/IFolderWatcher.h
         src/core/FileEvent.h
         src/core/ActionError.h
-        src/platform/cross/WindowsWatcher.cpp
-        src/platform/cross/WindowsWatcher.h)
+        src/platform/windows/WindowsWatcher.cpp
+        src/platform/windows/WindowsWatcher.h
+        src/platform/windows/HandleCloser.h
+        src/core/ThreadSafeQueue.h)

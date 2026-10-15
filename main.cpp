@@ -1,12 +1,10 @@
 #include <iostream>
-#include <optional>
 #include <string>
+#include <thread>
 #include <variant>
 #include "src/core/FileEvent.h"
-#include "src/platform/cross/WindowsWatcher.h"
-
-// TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
-// click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
+#include "src/core/ThreadSafeQueue.h"
+#include "src/platform/windows/WindowsWatcher.h"
 
 template <class... Ts>
 struct overloaded : Ts... { using Ts::operator()...; };
@@ -16,23 +14,44 @@ std::string describe(const FileEvent& event) {
         [](const Created& e)  { return "Created: " + e.path.string(); },
         [](const Modified& e) { return "Modified: " + e.path.string(); },
         [](const Removed& e) { return "Removed: " + e.path.string(); },
-        [](const Renamed& e) { return "Modified: from" + e.from.string() + "to " + e.to.string(); },
+        [](const Renamed& e) { return "Renamed: from " + e.from.string() + "   to " + e.to.string(); },
     }, event);
 }
+
 void describe2(const FileEvent& event) {
     std::cout << describe(event) << std::endl;
 }
+
 int main() {
     auto lang = "C++";
     std::cout << "Hello and welcome to " << lang << "!\n";
     WindowsWatcher watcher("C:/Saxion/Courses/C++/Testing");
-    auto token = std::stop_token();
-    watcher.start(describe2, token);
+    ThreadSafeQueue<FileEvent> actions_queue;
 
+    std::jthread producer_thread ([&](std::stop_token token) {
+        watcher.start([&actions_queue](const FileEvent& event) {
+            actions_queue.push(event);
+        }, std::move(token));
+    });
+
+    std::jthread consumer_thread([&](std::stop_token token) {
+        while (!token.stop_requested()) {
+            auto event_opt = actions_queue.pop();
+            if (!event_opt) {
+                break; // Queue was closed
+            }
+            // Process the event slowly safely here
+            describe2(*event_opt);
+        }
+    });
+
+    std::cout << "Press Enter to stop...\n";
+    std::cin.get();
+
+    std::cout << "Stopping app...\n";
+
+    producer_thread.request_stop();
+    actions_queue.close();
+    consumer_thread.request_stop();
     return 0;
 }
-
-// TIP See CLion help at <a
-// href="https://www.jetbrains.com/help/clion/">jetbrains.com/help/clion/</a>.
-//  Also, you can try interactive lessons for CLion by selecting
-//  'Help | Learn IDE Features' from the main menu.
