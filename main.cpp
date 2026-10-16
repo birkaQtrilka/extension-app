@@ -28,23 +28,22 @@ int main() {
     WindowsWatcher watcher("C:/Saxion/Courses/C++/Testing");
     ThreadSafeQueue<FileEvent> actions_queue;
 
-    std::jthread producer_thread ([&](std::stop_token token) {
-        auto expect = watcher.start([&actions_queue](const FileEvent& event) {
-            actions_queue.push(event);
-        }, std::move(token));
+    std::jthread producer_thread ([&](const std::stop_token& token) {
+        auto expect = watcher.start([&actions_queue](FileEvent event) {
+            actions_queue.push(std::move(event));
+        }, token);
         if (!expect) {
             std::cout << expect.error() << std::endl;
             actions_queue.close();
         }
     });
 
-    std::jthread consumer_thread([&](std::stop_token token) {
+    std::jthread consumer_thread([&](const std::stop_token& token) {
         while (!token.stop_requested()) {
             auto event_opt = actions_queue.pop();
             if (!event_opt) {
-                break; // Queue was closed
+                break;
             }
-            // Process the event slowly safely here
             describe2(*event_opt);
         }
     });

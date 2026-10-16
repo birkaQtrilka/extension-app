@@ -16,7 +16,7 @@ public:
     virtual ~IFolderWatcher() = default;
     using EventCallback = std::function<void(FileEvent)>;
     virtual std::expected<void, std::error_code>
-        start(EventCallback onEvent, std::stop_token stop) = 0;
+        start(const EventCallback& onEvent, std::stop_token stop) = 0;
 };
 
 

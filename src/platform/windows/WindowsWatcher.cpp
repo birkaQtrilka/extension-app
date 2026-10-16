@@ -6,19 +6,19 @@
 #include <windows.h>
 #include "HandleCloser.h"
 
-WindowsWatcher::WindowsWatcher(std::string dir_path)
+WindowsWatcher::WindowsWatcher(std::filesystem::path dir_path)
     : m_dir_path(std::move(dir_path))
 {
 }
 
-std::expected<void, std::error_code> WindowsWatcher::start(EventCallback onEvent, std::stop_token stop)
+std::expected<void, std::error_code> WindowsWatcher::start(const EventCallback& onEvent,const std::stop_token stop)
 {
     // Must outlive handles (destroyed last)
     alignas(DWORD) std::array<std::byte, 64 * 1024> buffer{};
     OVERLAPPED ov{};
 
     const HANDLE rawDirHandle = CreateFileA(
-        m_dir_path.c_str(),
+        m_dir_path.string().c_str(),
         FILE_LIST_DIRECTORY,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
         nullptr,
@@ -138,28 +138,28 @@ std::expected<void, std::error_code> WindowsWatcher::start(EventCallback onEvent
 
 void WindowsWatcher::ProcessEvents(const EventCallback& onEvent, FILE_NOTIFY_INFORMATION* info) {
     while (true) {
-        std::wstring wFileName(info->FileName, info->FileNameLength / sizeof(WCHAR));
+        std::wstring_view nameView(info->FileName, info->FileNameLength / sizeof(WCHAR));
 
         switch (info->Action) {
             case FILE_ACTION_ADDED:
-                onEvent(Created{wFileName});
+                onEvent(Created{nameView});
             break;
             case FILE_ACTION_REMOVED:
-                onEvent(Removed{wFileName});
+                onEvent(Removed{nameView});
             break;
             case FILE_ACTION_MODIFIED:
-                onEvent(Modified{wFileName});
+                onEvent(Modified{nameView});
             break;
             case FILE_ACTION_RENAMED_OLD_NAME:
-                m_old_name_for_rename = wFileName;
+                m_old_name_for_rename = nameView;
             break;
             case FILE_ACTION_RENAMED_NEW_NAME:
                 if (!m_old_name_for_rename.empty()) {
-                    onEvent(Renamed{m_old_name_for_rename, wFileName});
+                    onEvent(Renamed{m_old_name_for_rename, nameView});
                     m_old_name_for_rename.clear(); // Reset for safety
                 } else {
                     // Edge case: A file was moved INTO the watched directory from somewhere else.
-                    onEvent(Created{wFileName});
+                    onEvent(Created{nameView});
                 }
             break;
             default:
