@@ -11,4 +11,5 @@ add_executable(extension_app main.cpp
         src/platform/windows/WindowsWatcher.h
         src/platform/windows/HandleCloser.h
         src/core/ThreadSafeQueue.h
-        src/core/SetttleDetector.h)
+        src/core/SettleDetector.h
+        src/core/SettleDetector.cpp)
