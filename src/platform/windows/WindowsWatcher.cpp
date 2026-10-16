@@ -11,7 +11,7 @@ WindowsWatcher::WindowsWatcher(std::filesystem::path dir_path)
 {
 }
 
-std::expected<void, std::error_code> WindowsWatcher::start(const EventCallback& onEvent,const std::stop_token stop)
+std::expected<void, WatchError> WindowsWatcher::start(const EventCallback& onEvent,const std::stop_token stop)
 {
     // Must outlive handles (destroyed last)
     alignas(DWORD) std::array<std::byte, 64 * 1024> buffer{};
@@ -28,19 +28,19 @@ std::expected<void, std::error_code> WindowsWatcher::start(const EventCallback& 
     );
 
     if (rawDirHandle == INVALID_HANDLE_VALUE) {
-        return std::unexpected(std::error_code(GetLastError(), std::system_category()));
+        return std::unexpected(WatchError{ "INVALID_HANDLE_VALUE",std::error_code(GetLastError(), std::system_category())});
     }
     const UniqueHandle hDir{rawDirHandle};
 
     const HANDLE rawIoEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!rawIoEvent) {
-        return std::unexpected(std::error_code(GetLastError(), std::system_category()));
+        return std::unexpected(WatchError{ "CreateEventW io Event",std::error_code(GetLastError(), std::system_category())});
     }
     const UniqueHandle ioEvent{rawIoEvent};
 
     const HANDLE rawStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!rawStopEvent) {
-        return std::unexpected(std::error_code(GetLastError(), std::system_category()));
+        return std::unexpected(WatchError{ "CreateEventW stop event",std::error_code(GetLastError(), std::system_category())});
     }
     const UniqueHandle stopEvent{rawStopEvent};
 
@@ -73,7 +73,7 @@ std::expected<void, std::error_code> WindowsWatcher::start(const EventCallback& 
             hDir.get(),
             buffer.data(),
             static_cast<DWORD>(buffer.size()),
-            TRUE, // watch subdirectories
+            TRUE,
             filter,
             nullptr,
             &ov,
@@ -82,8 +82,7 @@ std::expected<void, std::error_code> WindowsWatcher::start(const EventCallback& 
 
         if (!readOk) {
             if (const DWORD err = GetLastError(); err != ERROR_IO_PENDING) {
-                std::cerr << "ReadDirectoryChangesW failed: " << err << "\n";
-                return std::unexpected(std::error_code(err, std::system_category()));
+                return std::unexpected(WatchError{"ReadDirectoryChangesW", std::error_code(err, std::system_category())});
             }
         }
 
@@ -103,12 +102,11 @@ std::expected<void, std::error_code> WindowsWatcher::start(const EventCallback& 
                 if (err == ERROR_OPERATION_ABORTED) {
                     break;
                 }
-                std::cerr << "GetOverlappedResult failed: " << err << "\n";
-                return std::unexpected(std::error_code(err, std::system_category()));
+                return std::unexpected(WatchError{"GetOverlappedResult failed", std::error_code(err, std::system_category())});
             }
 
             if (bytesReturned == 0) {
-                std::cerr << "Buffer overflow! Some events were lost. Full rescan needed.\n";
+                onEvent(Overflow{});
                 continue;
             }
 
@@ -128,8 +126,7 @@ std::expected<void, std::error_code> WindowsWatcher::start(const EventCallback& 
         }
         else {
             const DWORD err = GetLastError();
-            std::cerr << "WaitForMultipleObjects failed: " << err << "\n";
-            return std::unexpected(std::error_code(err, std::system_category()));
+            return std::unexpected(WatchError{ "WaitForMultipleObjects failed", std::error_code(err, std::system_category()) });
         }
     }
 

@@ -15,6 +15,7 @@ std::string describe(const FileEvent& event) {
         [](const Modified& e) { return "Modified: " + e.path.string(); },
         [](const Removed& e) { return "Removed: " + e.path.string(); },
         [](const Renamed& e) { return "Renamed: from " + e.from.string() + "   to " + e.to.string(); },
+        [](const Overflow& e) { return "Overflow error, currently unhandled"; },
     }, event);
 }
 
@@ -33,7 +34,7 @@ int main() {
             actions_queue.push(std::move(event));
         }, token);
         if (!expect) {
-            std::cout << expect.error() << std::endl;
+            std::cerr << "Watcher failed: " << expect.error() << '\n';
             actions_queue.close();
         }
     });
