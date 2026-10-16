@@ -17,8 +17,8 @@ std::expected<void, std::error_code> WindowsWatcher::start(const EventCallback& 
     alignas(DWORD) std::array<std::byte, 64 * 1024> buffer{};
     OVERLAPPED ov{};
 
-    const HANDLE rawDirHandle = CreateFileA(
-        m_dir_path.string().c_str(),
+    const HANDLE rawDirHandle = CreateFileW(
+        m_dir_path.c_str(),
         FILE_LIST_DIRECTORY,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
         nullptr,
@@ -143,13 +143,13 @@ std::expected<void, std::error_code> WindowsWatcher::start(const EventCallback& 
 // need to upgrade to ReadDirectoryChangesExW with FILE_NOTIFY_EXTENDED_INFORMATION,
 // which includes the file's unique FileId (analogous to an NTFS inode number),
 // allowing to correlate events by ID rather than by position
-void WindowsWatcher::ProcessEvents(const EventCallback& onEvent, FILE_NOTIFY_INFORMATION* info) {
-    // Local to this buffer processing run — zero heap allocations, no dangling
+void WindowsWatcher::ProcessEvents(const EventCallback& onEvent, FILE_NOTIFY_INFORMATION* info) const {
     std::wstring_view pendingOldName;
 
     auto flushOldName = [&]() {
         if (!pendingOldName.empty()) {
-            onEvent(Removed{pendingOldName});
+            // Emits temporary path -> 1 allocation (moved directly into Removed)
+            onEvent(Removed{m_dir_path / pendingOldName});
             pendingOldName = {};
         }
     };
@@ -163,23 +163,23 @@ void WindowsWatcher::ProcessEvents(const EventCallback& onEvent, FILE_NOTIFY_INF
 
         switch (info->Action) {
             case FILE_ACTION_ADDED:
-                onEvent(Created{nameView});
+                onEvent(Created{m_dir_path / nameView});
             break;
             case FILE_ACTION_REMOVED:
-                onEvent(Removed{nameView});
+                onEvent(Removed{m_dir_path / nameView});
             break;
             case FILE_ACTION_MODIFIED:
-                onEvent(Modified{nameView});
+                onEvent(Modified{m_dir_path / nameView});
             break;
             case FILE_ACTION_RENAMED_OLD_NAME:
-                pendingOldName = nameView;
+                pendingOldName = nameView; // 0 allocations
             break;
             case FILE_ACTION_RENAMED_NEW_NAME:
                 if (!pendingOldName.empty()) {
-                    onEvent(Renamed{pendingOldName, nameView});
+                    onEvent(Renamed{m_dir_path / pendingOldName, m_dir_path / nameView});
                     pendingOldName = {};
                 } else {
-                    onEvent(Created{nameView});
+                    onEvent(Created{m_dir_path / nameView});
                 }
             break;
             default:
