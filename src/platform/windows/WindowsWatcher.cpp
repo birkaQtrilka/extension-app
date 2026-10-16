@@ -136,9 +136,30 @@ std::expected<void, std::error_code> WindowsWatcher::start(const EventCallback& 
     return {};
 }
 
+// Windows API doesn't guarantee order in the case of renames
+// Currently: OLD_NAME in Buffer 1, NEW_NAME in Buffer 2 Degrades safely to Removed{old} + Created{new}
+// Also: OLD_A, OLD_B, NEW_A, NEW_B	Degrades safely to Removed + Created rather than corrupting state
+// in case where we want to always know when a file is renamed:
+// need to upgrade to ReadDirectoryChangesExW with FILE_NOTIFY_EXTENDED_INFORMATION,
+// which includes the file's unique FileId (analogous to an NTFS inode number),
+// allowing to correlate events by ID rather than by position
 void WindowsWatcher::ProcessEvents(const EventCallback& onEvent, FILE_NOTIFY_INFORMATION* info) {
+    // Local to this buffer processing run — zero heap allocations, no dangling
+    std::wstring_view pendingOldName;
+
+    auto flushOldName = [&]() {
+        if (!pendingOldName.empty()) {
+            onEvent(Removed{pendingOldName});
+            pendingOldName = {};
+        }
+    };
+
     while (true) {
         std::wstring_view nameView(info->FileName, info->FileNameLength / sizeof(WCHAR));
+
+        if (info->Action != FILE_ACTION_RENAMED_NEW_NAME) {
+            flushOldName();
+        }
 
         switch (info->Action) {
             case FILE_ACTION_ADDED:
@@ -151,28 +172,24 @@ void WindowsWatcher::ProcessEvents(const EventCallback& onEvent, FILE_NOTIFY_INF
                 onEvent(Modified{nameView});
             break;
             case FILE_ACTION_RENAMED_OLD_NAME:
-                m_old_name_for_rename = nameView;
+                pendingOldName = nameView;
             break;
             case FILE_ACTION_RENAMED_NEW_NAME:
-                if (!m_old_name_for_rename.empty()) {
-                    onEvent(Renamed{m_old_name_for_rename, nameView});
-                    m_old_name_for_rename.clear(); // Reset for safety
+                if (!pendingOldName.empty()) {
+                    onEvent(Renamed{pendingOldName, nameView});
+                    pendingOldName = {};
                 } else {
-                    // Edge case: A file was moved INTO the watched directory from somewhere else.
                     onEvent(Created{nameView});
                 }
             break;
             default:
                 break;
         }
+        if (info->NextEntryOffset == 0) break;
 
-        if (info->NextEntryOffset == 0) {
-            break;
-        }
-
-        // Advance the pointer to the next struct in the buffer
         info = reinterpret_cast<FILE_NOTIFY_INFORMATION*>(
             reinterpret_cast<char*>(info) + info->NextEntryOffset
         );
     }
+    flushOldName();
 }
