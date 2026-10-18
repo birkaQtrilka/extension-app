@@ -2,13 +2,12 @@
 #include <string>
 #include <thread>
 #include <variant>
+#include <chrono>
 #include "src/core/FileEvent.h"
+#include "src/core/Overloaded.h"
 #include "src/core/SettleDetector.h"
 #include "src/core/ThreadSafeQueue.h"
 #include "src/platform/windows/WindowsWatcher.h"
-
-template <class... Ts>
-struct overloaded : Ts... { using Ts::operator()...; };
 
 std::string describe(const FileEvent& event) {
     return std::visit(overloaded{
@@ -65,6 +64,8 @@ int main() {
     const auto lang = "C++";
     std::cout << "Hello and welcome to " << lang << "!\n";
     WindowsWatcher watcher("C:/Saxion/Courses/C++/Testing");
+    std::cout << "Watching directory: " << watcher.getWatchedDir() << "\n";
+
     ThreadSafeQueue<FileEvent> actions_queue;
 
     std::jthread producer_thread ([&](const std::stop_token& token) {
@@ -82,26 +83,42 @@ int main() {
     std::jthread consumer_thread([&](const std::stop_token& token) {
         constexpr auto quietPeriod = std::chrono::milliseconds(500);
         SettleDetector detector(quietPeriod);
+        bool queue_closed = false;
 
         while (!token.stop_requested()) {
-            auto event_opt = actions_queue.pop_for(quietPeriod);
-            const auto now = std::chrono::steady_clock::now();
-            if (event_opt) {
-                if (std::holds_alternative<Overflow>(*event_opt)) {
-                    rescanDirectory(watcher.getWatchedDir(), detector, now);
-                } else {
-                    detector.onEvent(*event_opt, now);
-                    describe2(*event_opt);
-                }
-            }
+            // auto event_opt = actions_queue.pop_for(quietPeriod);
+            auto now = std::chrono::steady_clock::now();
             for (
                 auto ready_files = detector.collectReady(now);
                 const auto&[path] : ready_files) {
-                std::cout << "[FileReady] Ready for processing: " << path << '\n';
+                std::cout << "[FileReady] Ready: " << path << '\n';
             }
-            // If the queue was closed and is now completely empty, exit
-            if (!event_opt && actions_queue.is_closed() && detector.empty()) {
-                break;
+            auto deadline = detector.nextDeadline();
+            if (queue_closed) {
+                if (!deadline) {
+                    break;
+                }
+                std::this_thread::sleep_until(*deadline);
+                continue;
+            }
+            std::expected<FileEvent, PopFailure> result = deadline
+                ? actions_queue.pop_until(*deadline)
+                : actions_queue.pop();
+
+            now = std::chrono::steady_clock::now();
+            if (result) {
+                if (std::holds_alternative<Overflow>(*result)) {
+                    rescanDirectory(watcher.getWatchedDir(), detector, now);
+                } else {
+                    detector.onEvent(*result, now);
+                    describe2(*result);
+                }
+            }
+            else {
+                if (result.error() == PopFailure::Closed) {
+                    queue_closed = true;
+                }
+                // If PopFailure::Timeout, do nothing: loop restarts and collectReady() emits the file!            }
             }
         }
     });

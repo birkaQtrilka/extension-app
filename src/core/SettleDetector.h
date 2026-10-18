@@ -21,6 +21,10 @@ public:
     std::vector<FileReady> collectReady(TimePoint now);
     [[nodiscard]] bool empty() const noexcept { return m_lastSeen.empty(); }
     void pruneMissing(const std::unordered_set<std::filesystem::path>& existingPaths);
+    // Returns the exact moment the earliest pending file will be ready,
+    // or std::nullopt if no files are being tracked.
+    [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> nextDeadline() const;
+
 private:
     std::chrono::milliseconds m_quietPeriod;
     std::unordered_map<std::filesystem::path,

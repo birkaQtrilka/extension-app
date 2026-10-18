@@ -3,7 +3,6 @@
 //
 #ifndef FILEEVENT_H
 #define FILEEVENT_H
-#pragma once
 #include <filesystem>
 #include <variant>
 

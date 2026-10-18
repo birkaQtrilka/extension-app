@@ -1,14 +1,12 @@
 //
 // Created by Birka on 16/10/2026.
 //
+#pragma once
 #include "SettleDetector.h"
 #include <variant>
-
-// Helper for std::visit
-template<class... Ts> struct Overloaded : Ts... { using Ts::operator()...; };
-
+#include "Overloaded.h"
 void SettleDetector::onEvent(const FileEvent& event, std::chrono::steady_clock::time_point now) {
-    std::visit(Overloaded{
+    std::visit(overloaded{
         [&](const Created& e) {
             m_lastSeen[e.path] = now;
         },
@@ -47,5 +45,21 @@ void SettleDetector::pruneMissing(const std::unordered_set<std::filesystem::path
     std::erase_if(m_lastSeen, [&](const auto& pair) {
         return !existingPaths.contains(pair.first);
     });
+}
+
+std::optional<std::chrono::steady_clock::time_point> SettleDetector::nextDeadline() const {
+    if (m_lastSeen.empty()) {
+        return std::nullopt;
+    }
+
+    // Find the file that was seen earliest
+    const auto earliestIt = std::min_element(
+        m_lastSeen.begin(), m_lastSeen.end(),
+        [](const auto& a, const auto& b) {
+            return a.second < b.second;
+        }
+    );
+
+    return earliestIt->second + m_quietPeriod;
 }
 

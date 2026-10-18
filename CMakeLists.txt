@@ -12,4 +12,6 @@ add_executable(extension_app main.cpp
         src/platform/windows/HandleCloser.h
         src/core/ThreadSafeQueue.h
         src/core/SettleDetector.h
-        src/core/SettleDetector.cpp)
+        src/core/SettleDetector.cpp
+        src/core/Overloaded.h
+        src/core/IFileProbe.h)

@@ -57,9 +57,6 @@ std::expected<void, WatchError> WindowsWatcher::start(const EventCallback& onEve
                              FILE_NOTIFY_CHANGE_SIZE |
                              FILE_NOTIFY_CHANGE_LAST_WRITE |
                              FILE_NOTIFY_CHANGE_CREATION;
-
-    std::cout << "Watching directory: " << m_dir_path << "\n";
-
     while (!stop.stop_requested()) {
         // Reset the manual-reset I/O event and OVERLAPPED internal state
         ResetEvent(ioEvent.get());
