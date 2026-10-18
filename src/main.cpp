@@ -3,12 +3,12 @@
 #include <thread>
 #include <variant>
 #include <chrono>
-#include "src/core/Overloaded.h"
-#include "src/core/FileEvent.h"
-#include "src/core/SettleDetector.h"
-#include "src/core/ThreadSafeQueue.h"
-#include "src/platform/windows/WindowsWatcher.h"
-#include "src/platform/windows/WindowsFileProbe.h"
+#include "core/Overloaded.h"
+#include "core/FileEvent.h"
+#include "core/SettleDetector.h"
+#include "core/ThreadSafeQueue.h"
+#include "platform/windows/WindowsWatcher.h"
+#include "platform/windows/WindowsFileProbe.h"
 
 std::string describe(const FileEvent& event) {
     return std::visit(overloaded{

@@ -1,7 +1,6 @@
 //
 // Created by Birka on 16/10/2026.
 //
-#pragma once
 #include "SettleDetector.h"
 #include <variant>
 #include "Overloaded.h"
