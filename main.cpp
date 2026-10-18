@@ -3,11 +3,12 @@
 #include <thread>
 #include <variant>
 #include <chrono>
-#include "src/core/FileEvent.h"
 #include "src/core/Overloaded.h"
+#include "src/core/FileEvent.h"
 #include "src/core/SettleDetector.h"
 #include "src/core/ThreadSafeQueue.h"
 #include "src/platform/windows/WindowsWatcher.h"
+#include "src/platform/windows/WindowsFileProbe.h"
 
 std::string describe(const FileEvent& event) {
     return std::visit(overloaded{
@@ -63,6 +64,7 @@ void rescanDirectory(
 int main() {
     const auto lang = "C++";
     std::cout << "Hello and welcome to " << lang << "!\n";
+    const WindowsFileProbe file_probe;
     WindowsWatcher watcher("C:/Saxion/Courses/C++/Testing");
     std::cout << "Watching directory: " << watcher.getWatchedDir() << "\n";
 
@@ -82,7 +84,7 @@ int main() {
 
     std::jthread consumer_thread([&](const std::stop_token& token) {
         constexpr auto quietPeriod = std::chrono::milliseconds(500);
-        SettleDetector detector(quietPeriod);
+        SettleDetector detector(quietPeriod, file_probe);
         bool queue_closed = false;
 
         while (!token.stop_requested()) {

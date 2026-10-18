@@ -14,4 +14,5 @@ add_executable(extension_app main.cpp
         src/core/SettleDetector.h
         src/core/SettleDetector.cpp
         src/core/Overloaded.h
-        src/core/IFileProbe.h)
+        src/core/IFileProbe.h
+        src/platform/windows/WindowsFileProbe.h)

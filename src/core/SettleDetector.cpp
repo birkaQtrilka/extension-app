@@ -29,13 +29,23 @@ void SettleDetector::onEvent(const FileEvent& event, std::chrono::steady_clock::
 std::vector<FileReady> SettleDetector::collectReady(std::chrono::steady_clock::time_point now) {
     std::vector<FileReady> ready;
 
-    std::erase_if(m_lastSeen, [&](const auto& entry) {
-        const auto& [path, lastSeen] = entry;
-        if (now - lastSeen >= m_quietPeriod) {
-            ready.push_back(FileReady{path});
-            return true; // Remove from map
+    std::erase_if(m_lastSeen, [&](auto& entry) {
+        auto& [path, lastSeen] = entry;
+        if (now - lastSeen < m_quietPeriod) {
+            return false; // Keep waiting
         }
-        return false; // Keep waiting
+
+        if (!m_probe.isRegularFile(path)) {
+            return true; // Erase from map, do NOT emit FileReady
+        }
+        if (!m_probe.isStable(path)) {
+            // Stalled download / still locked by writer:
+            // Refresh timestamp and let it sit for another quietPeriod
+            lastSeen = now;
+            return false; // Keep in map
+        }
+        ready.push_back(FileReady{path});
+        return true; // erase from map and emit
     });
 
     return ready;
