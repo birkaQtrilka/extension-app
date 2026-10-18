@@ -5,7 +5,7 @@
 #include "RuleEngine.h"
 
 std::expected<void, ActionError> RuleEngine::executeActions(const FileReady &file) const {
-    const std::filesystem::path currentPath = file.path;
+    std::filesystem::path currentPath = file.path;
 
     for (const auto& rule : m_rules) {
         if (!rule.matches(currentPath, file.events)) continue;

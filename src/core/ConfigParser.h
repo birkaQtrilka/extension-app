@@ -13,7 +13,7 @@
 class ConfigParser {
 public:
     explicit ConfigParser(std::filesystem::path file) : m_file(std::move(file)) {};
-    std::expected<std::vector<Rule>, std::string> parse();
+    std::expected<std::vector<Rule>, std::string> parse() const;
 private:
     std::filesystem::path m_file;
 };

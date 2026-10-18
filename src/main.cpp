@@ -86,26 +86,26 @@ int main() {
     std::jthread consumer_thread([&](const std::stop_token& token) {
         constexpr auto quietPeriod = std::chrono::milliseconds(500);
         SettleDetector detector(quietPeriod, file_probe);
-        // ConfigParser parser("rules.json");
-        // auto parsedRules = parser.parse();
-        // if (!parsedRules) {
-            // std::cerr << "Failed to parse rules.json\n";
-            // return;
-        // }
-        // RuleEngine rule_engine(std::move(parsedRules.value()));
+        ConfigParser parser("rules.json");
+        auto parsedRules = parser.parse();
+        if (!parsedRules) {
+            std::cerr << "Failed to parse rules.json\n";
+            return;
+        }
+        RuleEngine rule_engine(std::move(parsedRules.value()));
         while (!token.stop_requested()) {
             auto now = std::chrono::steady_clock::now();
 
             // Emit files that settled naturally during the quiet period
             for (const auto& readyFile : detector.collectReady(now)) {
                 std::cout << "[FileReady] Ready: " << readyFile.path << '\n';
-                // const auto expect = rule_engine.executeActions(readyFile);
-                // if (!expect) {
-                //     const auto&[actionType, targetPath, ec, message] = expect.error();
-                //     std::cerr << "[Action Failed] " << actionType
-                //           << " on " + readyFile.path.string() << " -> " << targetPath.string()
-                //           << ": " << message << " (" << ec.message() << ")\n";
-                // }
+                const auto expect = rule_engine.executeActions(readyFile);
+                if (!expect) {
+                    const auto&[actionType, targetPath, ec, message] = expect.error();
+                    std::cerr << "[Action Failed] " << actionType
+                          << " on " + readyFile.path.string() << " -> " << targetPath.string()
+                          << ": " << message << " (" << ec.message() << ")\n";
+                }
             }
 
             auto deadline = detector.nextDeadline();

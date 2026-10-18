@@ -2,22 +2,11 @@
   {
     "match": {
       "patterns": ["*_cv.*", "*.cv"],
-      "events": ["Create", "Rename"]
+      "events": ["Created", "Renamed"]
     },
     "actions": [
       { "type": "moveTo", "destination": "C:\\Saxion\\Courses\\C++\\TestFolder\\Test1" }
     ],
     "stopOnMatch": true
-  },
-  {
-    "match": {
-      "patterns": ["*_A.*"],
-      "events": ["created", "renamed"]
-    },
-    "actions": [
-      { "type": "copyTo", "destination": "C:\\Saxion\\Courses\\C++\\TestFolder\\Test2" },
-      { "type": "copyTo", "destination": "C:\\Saxion\\Courses\\C++\\TestFolder\\Test3" }
-    ],
-    "stopOnMatch": false
   }
 ]

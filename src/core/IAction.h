@@ -11,11 +11,13 @@
 
 
 class IAction {
+protected:
+    using path = std::filesystem::path;
 public:
     virtual ~IAction() = default;
     // Returns true if the file still exists at 'currentPath' after execution,
     // false if it was moved/deleted (which affects subsequent chained actions).
-    virtual ActionResult execute(const std::filesystem::path& currentPath) = 0;
+    virtual ActionResult execute(path& currentPath) = 0;
 };
 
 

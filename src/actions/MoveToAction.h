@@ -7,7 +7,6 @@
 #include "core/IAction.h"
 
 class MoveToAction final : public IAction {
-    using path = std::filesystem::path;
     path destinationDir_;
 public:
     explicit MoveToAction(path dest) : destinationDir_(std::move(dest)) {}
