@@ -3,6 +3,8 @@
 #include <thread>
 #include <variant>
 #include <chrono>
+#include <unordered_set>
+#include <filesystem>
 #include "core/Overloaded.h"
 #include "core/FileEvent.h"
 #include "core/SettleDetector.h"
@@ -14,9 +16,9 @@ std::string describe(const FileEvent& event) {
     return std::visit(overloaded{
         [](const Created& e)  { return "Created: " + e.path.string(); },
         [](const Modified& e) { return "Modified: " + e.path.string(); },
-        [](const Removed& e) { return "Removed: " + e.path.string(); },
-        [](const Renamed& e) { return "Renamed: from " + e.from.string() + "   to " + e.to.string(); },
-        [](const Overflow& e) -> std::string { return "Overflow error, currently unhandled"; },
+        [](const Removed& e)  { return "Removed: " + e.path.string(); },
+        [](const Renamed& e)  { return "Renamed: from " + e.from.string() + " to " + e.to.string(); },
+        [](const Overflow&)   { return std::string{"Overflow error, currently unhandled"}; },
     }, event);
 }
 
@@ -49,15 +51,11 @@ void rescanDirectory(
         if (std::error_code status_ec; entry.is_regular_file(status_ec)) {
             const auto& path = entry.path();
             currentFiles.insert(path);
-
-            // Re-affirm existence: treat as seen right now
             detector.onEvent(Modified{path}, now);
         }
     }
 
-    // Remove any paths that were deleted during the overflow
     detector.pruneMissing(currentFiles);
-
     std::cout << "[Rescan] Completed. Reconciled " << currentFiles.size() << " files.\n";
 }
 
@@ -70,56 +68,52 @@ int main() {
 
     ThreadSafeQueue<FileEvent> actions_queue;
 
-    std::jthread producer_thread ([&](const std::stop_token& token) {
+    std::jthread producer_thread([&](const std::stop_token& token) {
         auto expect = watcher.start([&actions_queue](FileEvent event) {
             if (!actions_queue.push(std::move(event))) {
-                std::cerr << "Cannot push to action queue" << '\n';
+                std::cerr << "Cannot push to action queue\n";
             }
         }, token);
         if (!expect) {
             std::cerr << "Watcher failed: " << expect.error() << '\n';
         }
+        // Producer is done; signal the queue that no more events will arrive.
         actions_queue.close();
     });
 
     std::jthread consumer_thread([&](const std::stop_token& token) {
         constexpr auto quietPeriod = std::chrono::milliseconds(500);
         SettleDetector detector(quietPeriod, file_probe);
-        bool queue_closed = false;
 
         while (!token.stop_requested()) {
             auto now = std::chrono::steady_clock::now();
-            for (
-                auto ready_files = detector.collectReady(now);
-                const auto&[path] : ready_files) {
+
+            // Emit files that settled naturally during the quiet period
+            for (const auto& [path] : detector.collectReady(now)) {
                 std::cout << "[FileReady] Ready: " << path << '\n';
             }
+
             auto deadline = detector.nextDeadline();
-            if (queue_closed) {
-                if (!deadline) {
-                    break;
-                }
-                std::this_thread::sleep_until(*deadline);
-                continue;
-            }
             std::expected<FileEvent, PopFailure> result = deadline
                 ? actions_queue.pop_until(*deadline)
                 : actions_queue.pop();
 
-            now = std::chrono::steady_clock::now();
-            if (result) {
-                if (std::holds_alternative<Overflow>(*result)) {
-                    rescanDirectory(watcher.getWatchedDir(), detector, now);
-                } else {
-                    detector.onEvent(*result, now);
-                    describe2(*result);
-                }
-            }
-            else {
+            if (!result) {
                 if (result.error() == PopFailure::Closed) {
-                    queue_closed = true;
+                    // Queue is closed and drained of raw events.
+                    // Per policy: discard pending files in detector and exit.
+                    break;
                 }
-                // If PopFailure::Timeout, do nothing: loop restarts and collectReady() emits the file!            }
+                // Timeout: Loop restarts and collectReady() emits settled files.
+                continue;
+            }
+
+            now = std::chrono::steady_clock::now();
+            if (std::holds_alternative<Overflow>(*result)) {
+                rescanDirectory(watcher.getWatchedDir(), detector, now);
+            } else {
+                detector.onEvent(*result, now);
+                describe2(*result);
             }
         }
     });
@@ -132,5 +126,6 @@ int main() {
     producer_thread.request_stop();
     actions_queue.close();
     consumer_thread.request_stop();
+
     return 0;
 }
