@@ -7,6 +7,7 @@
 #include <chrono>
 #include <unordered_map>
 #include <filesystem>
+#include <unordered_set>
 
 #include "FileEvent.h"
 using TimePoint = std::chrono::steady_clock::time_point;
@@ -19,7 +20,7 @@ public:
     void onEvent(const FileEvent& event, TimePoint now);
     std::vector<FileReady> collectReady(TimePoint now);
     [[nodiscard]] bool empty() const noexcept { return m_lastSeen.empty(); }
-
+    void pruneMissing(const std::unordered_set<std::filesystem::path>& existingPaths);
 private:
     std::chrono::milliseconds m_quietPeriod;
     std::unordered_map<std::filesystem::path,

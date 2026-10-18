@@ -41,6 +41,7 @@ public:
     using EventCallback = std::function<void(FileEvent)>;
     virtual std::expected<void, WatchError>
         start(const EventCallback& onEvent, std::stop_token stop) = 0;
+    [[nodiscard]] virtual std::filesystem::path getWatchedDir() const = 0;
 };
 
 

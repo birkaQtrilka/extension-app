@@ -24,17 +24,13 @@ void SettleDetector::onEvent(const FileEvent& event, std::chrono::steady_clock::
             m_lastSeen.erase(e.from);
             m_lastSeen[e.to] = now;
         },
-        [&](const Overflow&) {
-            // Continuity broken: clear unconfirmed state
-            m_lastSeen.clear();
-        },
+        [&](const Overflow&) { },
     }, event);
 }
 
 std::vector<FileReady> SettleDetector::collectReady(std::chrono::steady_clock::time_point now) {
     std::vector<FileReady> ready;
 
-    // C++20 std::erase_if on maps cleanly removes elements while iterating
     std::erase_if(m_lastSeen, [&](const auto& entry) {
         const auto& [path, lastSeen] = entry;
         if (now - lastSeen >= m_quietPeriod) {
@@ -46,3 +42,10 @@ std::vector<FileReady> SettleDetector::collectReady(std::chrono::steady_clock::t
 
     return ready;
 }
+
+void SettleDetector::pruneMissing(const std::unordered_set<std::filesystem::path> &existingPaths) {
+    std::erase_if(m_lastSeen, [&](const auto& pair) {
+        return !existingPaths.contains(pair.first);
+    });
+}
+

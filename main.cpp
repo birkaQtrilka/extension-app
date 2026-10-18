@@ -24,8 +24,45 @@ void describe2(const FileEvent& event) {
     std::cout << describe(event) << std::endl;
 }
 
+void rescanDirectory(
+    const std::filesystem::path& root,
+    SettleDetector& detector,
+    const std::chrono::steady_clock::time_point now
+) {
+    std::cout << "[Rescan] Buffer overflow detected. Rescanning " << root << "...\n";
+
+    std::unordered_set<std::filesystem::path> currentFiles;
+    std::error_code ec;
+
+    const auto iter = std::filesystem::recursive_directory_iterator(
+        root,
+        std::filesystem::directory_options::skip_permission_denied,
+        ec
+    );
+
+    if (ec) {
+        std::cerr << "[Rescan Error] Failed to open root directory: " << ec.message() << '\n';
+        return;
+    }
+
+    for (const auto& entry : iter) {
+        if (std::error_code status_ec; entry.is_regular_file(status_ec)) {
+            const auto& path = entry.path();
+            currentFiles.insert(path);
+
+            // Re-affirm existence: treat as seen right now
+            detector.onEvent(Modified{path}, now);
+        }
+    }
+
+    // Remove any paths that were deleted during the overflow
+    detector.pruneMissing(currentFiles);
+
+    std::cout << "[Rescan] Completed. Reconciled " << currentFiles.size() << " files.\n";
+}
+
 int main() {
-    auto lang = "C++";
+    const auto lang = "C++";
     std::cout << "Hello and welcome to " << lang << "!\n";
     WindowsWatcher watcher("C:/Saxion/Courses/C++/Testing");
     ThreadSafeQueue<FileEvent> actions_queue;
@@ -50,7 +87,12 @@ int main() {
             auto event_opt = actions_queue.pop_for(quietPeriod);
             const auto now = std::chrono::steady_clock::now();
             if (event_opt) {
-                detector.onEvent(*event_opt, now);
+                if (std::holds_alternative<Overflow>(*event_opt)) {
+                    rescanDirectory(watcher.getWatchedDir(), detector, now);
+                } else {
+                    detector.onEvent(*event_opt, now);
+                    describe2(*event_opt);
+                }
             }
             for (
                 auto ready_files = detector.collectReady(now);
@@ -61,7 +103,6 @@ int main() {
             if (!event_opt && actions_queue.is_closed() && detector.empty()) {
                 break;
             }
-            // describe2(*event_opt);
         }
     });
 

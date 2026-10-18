@@ -133,6 +133,10 @@ std::expected<void, WatchError> WindowsWatcher::start(const EventCallback& onEve
     return {};
 }
 
+std::filesystem::path WindowsWatcher::getWatchedDir() const {
+    return m_dir_path;
+}
+
 // Windows API doesn't guarantee order in the case of renames
 // Currently: OLD_NAME in Buffer 1, NEW_NAME in Buffer 2 Degrades safely to Removed{old} + Created{new}
 // Also: OLD_A, OLD_B, NEW_A, NEW_B	Degrades safely to Removed + Created rather than corrupting state
