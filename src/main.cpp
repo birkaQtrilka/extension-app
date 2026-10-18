@@ -28,6 +28,38 @@ void describe2(const FileEvent& event) {
     std::cout << describe(event) << std::endl;
 }
 
+void initialScanDirectory(
+    const std::filesystem::path& root,
+    SettleDetector& detector,
+    const std::chrono::steady_clock::time_point now
+) {
+    std::cout << "[InitScan] Scanning existing files in " << root << "...\n";
+
+    std::error_code ec;
+    const auto iter = std::filesystem::recursive_directory_iterator(
+        root,
+        std::filesystem::directory_options::skip_permission_denied,
+        ec
+    );
+
+    if (ec) {
+        std::cerr << "[InitScan Error] Failed to open root directory: " << ec.message() << '\n';
+        return;
+    }
+
+    std::size_t count = 0;
+    for (const auto& entry : iter) {
+        if (std::error_code status_ec; entry.is_regular_file(status_ec)) {
+            const auto& path = entry.path();
+            detector.onEvent(FileEvent::init(path), now);
+            ++count;
+        }
+    }
+
+    std::cout << "[InitScan] Completed. Discovered " << count << " existing files.\n";
+}
+
+
 void rescanDirectory(
     const std::filesystem::path& root,
     SettleDetector& detector,
@@ -93,6 +125,9 @@ int main() {
             return;
         }
         RuleEngine rule_engine(std::move(parsedRules.value()));
+        auto startupTime = std::chrono::steady_clock::now();
+        initialScanDirectory(watcher.getWatchedDir(), detector, startupTime);
+
         while (!token.stop_requested()) {
             auto now = std::chrono::steady_clock::now();
 

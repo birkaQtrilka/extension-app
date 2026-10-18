@@ -23,6 +23,9 @@ struct FileEvent {
     static FileEvent overflow() {
         return { EventKind::Overflow, {}, {} };
     }
+    static FileEvent init(std::filesystem::path p) {
+        return { EventKind::Init, {p}, {} };
+    }
 };
 
 // Ready-file after debounce/settling (can even reuse FileEvent, or alias it)

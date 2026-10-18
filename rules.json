@@ -2,7 +2,7 @@
   {
     "match": {
       "patterns": ["*_cv.*", "*.cv"],
-      "events": ["Created", "Renamed"]
+      "events": ["Created", "Renamed","Init"]
     },
     "actions": [
       { "type": "moveTo", "destination": "C:\\Saxion\\Courses\\C++\\TestFolder\\Test1" }

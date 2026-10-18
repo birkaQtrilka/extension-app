@@ -45,6 +45,7 @@ namespace {
 
         if (lowerStr == "created") return EventKind::Created;
         if (lowerStr == "renamed") return EventKind::Renamed;
+        if (lowerStr == "init") return EventKind::Init;
         // Add more event mappings if needed (e.g., Modified, Deleted)
 
         return EventKind::None;

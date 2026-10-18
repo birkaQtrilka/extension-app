@@ -8,6 +8,7 @@ enum class EventKind : uint8_t {
     Removed  = 1 << 2,
     Renamed  = 1 << 3,
     Overflow = 1 << 4,
+    Init = 1 << 5,
 };
 
 constexpr EventKind operator|(EventKind a, EventKind b) noexcept {

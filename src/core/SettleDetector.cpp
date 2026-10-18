@@ -3,6 +3,7 @@
 void SettleDetector::onEvent(const FileEvent& event, TimePoint now) {
     switch (event.kind) {
         case EventKind::Created:
+        case EventKind::Init:
         case EventKind::Modified: {
             auto& entry = m_pending[event.path];
             entry.lastSeen = now;
