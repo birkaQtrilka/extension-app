@@ -2,7 +2,13 @@ cmake_minimum_required(VERSION 3.30)
 project(extension_app)
 set(CMAKE_CXX_STANDARD 26)
 
-# 1. Automatically download Catch2 v3 from GitHub
+configure_file(
+        "${CMAKE_SOURCE_DIR}/rules.json"
+        "${CMAKE_BINARY_DIR}/rules.json"
+        COPYONLY
+)
+
+# Catch2 v3 from GitHub
 include(FetchContent)
 FetchContent_Declare(
         Catch2
@@ -10,6 +16,10 @@ FetchContent_Declare(
         GIT_TAG        v3.5.3 # Or latest v3 release
 )
 FetchContent_MakeAvailable(Catch2)
+# json from GitHub
+FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz)
+FetchContent_MakeAvailable(json)
+
 
 add_executable(extension_app src/main.cpp
         src/core/IAction.h
@@ -22,9 +32,15 @@ add_executable(extension_app src/main.cpp
         src/core/ThreadSafeQueue.h
         src/core/SettleDetector.h
         src/core/SettleDetector.cpp
-        src/core/Overloaded.h
         src/core/IFileProbe.h
         src/platform/windows/WindowsFileProbe.h
+        src/core/RuleEngine.cpp
+        src/core/RuleEngine.h
+        src/core/ConfigParser.cpp
+        src/core/ConfigParser.h
+        src/actions/MoveToAction.h
+        src/core/EventKind.h
+        src/core/Rule.h
 )
 target_include_directories(extension_app PRIVATE src)
 
@@ -37,6 +53,7 @@ add_executable(unit_tests
 target_include_directories(unit_tests PRIVATE src tests)
 # 3. Link Catch2 (Catch2WithMain provides int main() automatically!)
 target_link_libraries(unit_tests PRIVATE Catch2::Catch2WithMain)
+target_link_libraries(extension_app PRIVATE nlohmann_json::nlohmann_json)
 
 # 4. Enable test discovery in your IDE
 include(CTest)

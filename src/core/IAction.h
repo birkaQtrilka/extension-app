@@ -5,17 +5,17 @@
 #ifndef IACTION_H
 #define IACTION_H
 #include <expected>
-#include <string_view>
+#include <filesystem>
 
 #include "ActionError.h"
-#include "FileEvent.h"
 
 
 class IAction {
 public:
     virtual ~IAction() = default;
-    virtual std::string_view name() const = 0;
-    virtual std::expected<void, ActionError> execute(const FileEvent& event) = 0;
+    // Returns true if the file still exists at 'currentPath' after execution,
+    // false if it was moved/deleted (which affects subsequent chained actions).
+    virtual ActionResult execute(const std::filesystem::path& currentPath) = 0;
 };
 
 

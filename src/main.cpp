@@ -1,25 +1,27 @@
 #include <iostream>
 #include <string>
 #include <thread>
-#include <variant>
 #include <chrono>
 #include <unordered_set>
 #include <filesystem>
-#include "core/Overloaded.h"
+
+#include "core/ConfigParser.h"
 #include "core/FileEvent.h"
+#include "core/RuleEngine.h"
 #include "core/SettleDetector.h"
 #include "core/ThreadSafeQueue.h"
 #include "platform/windows/WindowsWatcher.h"
 #include "platform/windows/WindowsFileProbe.h"
 
 std::string describe(const FileEvent& event) {
-    return std::visit(overloaded{
-        [](const Created& e)  { return "Created: " + e.path.string(); },
-        [](const Modified& e) { return "Modified: " + e.path.string(); },
-        [](const Removed& e)  { return "Removed: " + e.path.string(); },
-        [](const Renamed& e)  { return "Renamed: from " + e.from.string() + " to " + e.to.string(); },
-        [](const Overflow&)   { return std::string{"Overflow error, currently unhandled"}; },
-    }, event);
+    switch (event.kind) {
+        case EventKind::Created:  return "Created: " + event.path.string();
+        case EventKind::Modified: return "Modified: " + event.path.string();
+        case EventKind::Removed:  return "Removed: " + event.path.string();
+        case EventKind::Renamed:  return "Renamed: from " + event.oldPath.string() + " to " + event.path.string();
+        case EventKind::Overflow: return "Overflow error detected";
+        default:                  return "Unknown event";
+    }
 }
 
 void describe2(const FileEvent& event) {
@@ -51,7 +53,7 @@ void rescanDirectory(
         if (std::error_code status_ec; entry.is_regular_file(status_ec)) {
             const auto& path = entry.path();
             currentFiles.insert(path);
-            detector.onEvent(Modified{path}, now);
+            detector.onEvent(FileEvent::modified(path), now);
         }
     }
 
@@ -84,13 +86,26 @@ int main() {
     std::jthread consumer_thread([&](const std::stop_token& token) {
         constexpr auto quietPeriod = std::chrono::milliseconds(500);
         SettleDetector detector(quietPeriod, file_probe);
-
+        // ConfigParser parser("rules.json");
+        // auto parsedRules = parser.parse();
+        // if (!parsedRules) {
+            // std::cerr << "Failed to parse rules.json\n";
+            // return;
+        // }
+        // RuleEngine rule_engine(std::move(parsedRules.value()));
         while (!token.stop_requested()) {
             auto now = std::chrono::steady_clock::now();
 
             // Emit files that settled naturally during the quiet period
-            for (const auto& [path] : detector.collectReady(now)) {
-                std::cout << "[FileReady] Ready: " << path << '\n';
+            for (const auto& readyFile : detector.collectReady(now)) {
+                std::cout << "[FileReady] Ready: " << readyFile.path << '\n';
+                // const auto expect = rule_engine.executeActions(readyFile);
+                // if (!expect) {
+                //     const auto&[actionType, targetPath, ec, message] = expect.error();
+                //     std::cerr << "[Action Failed] " << actionType
+                //           << " on " + readyFile.path.string() << " -> " << targetPath.string()
+                //           << ": " << message << " (" << ec.message() << ")\n";
+                // }
             }
 
             auto deadline = detector.nextDeadline();
@@ -109,7 +124,7 @@ int main() {
             }
 
             now = std::chrono::steady_clock::now();
-            if (std::holds_alternative<Overflow>(*result)) {
+            if (result->kind == EventKind::Overflow) {
                 rescanDirectory(watcher.getWatchedDir(), detector, now);
             } else {
                 detector.onEvent(*result, now);

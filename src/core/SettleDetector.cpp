@@ -1,75 +1,89 @@
-//
-// Created by Birka on 16/10/2026.
-//
 #include "SettleDetector.h"
-#include <variant>
-#include "Overloaded.h"
-void SettleDetector::onEvent(const FileEvent& event, std::chrono::steady_clock::time_point now) {
-    std::visit(overloaded{
-        [&](const Created& e) {
-            m_lastSeen[e.path] = now;
-        },
-        [&](const Modified& e) {
-            m_lastSeen[e.path] = now;
-        },
-        [&](const Removed& e) {
-            // Cancel any pending notification for a file that was deleted
-            m_lastSeen.erase(e.path);
-        },
-        [&](const Renamed& e) {
-            // Cancel old temporary path, start debounce on the new destination path
-            m_lastSeen.erase(e.from);
-            m_lastSeen[e.to] = now;
-        },
-        [&](const Overflow&) { },
-    }, event);
+
+void SettleDetector::onEvent(const FileEvent& event, TimePoint now) {
+    switch (event.kind) {
+        case EventKind::Created:
+        case EventKind::Modified: {
+            auto& entry = m_pending[event.path];
+            entry.lastSeen = now;
+            entry.accumulatedEvents |= event.kind;
+            break;
+        }
+
+        case EventKind::Removed: {
+            // File was deleted before quietPeriod expired; drop tracking
+            m_pending.erase(event.path);
+            break;
+        }
+
+        case EventKind::Renamed: {
+            // Cancel debounce on the old path
+            m_pending.erase(event.oldPath);
+
+            // Start debounce on the destination path
+            auto& entry = m_pending[event.path];
+            entry.lastSeen = now;
+            entry.accumulatedEvents |= EventKind::Renamed;
+            break;
+        }
+
+        case EventKind::Overflow:
+        case EventKind::None:
+            break;
+    }
 }
 
-std::vector<FileReady> SettleDetector::collectReady(std::chrono::steady_clock::time_point now) {
+std::vector<FileReady> SettleDetector::collectReady(TimePoint now) {
     std::vector<FileReady> ready;
 
-    std::erase_if(m_lastSeen, [&](auto& entry) {
-        auto& [path, lastSeen] = entry;
-        if (now - lastSeen < m_quietPeriod) {
-            return false; // Keep waiting
+    std::erase_if(m_pending, [&](auto& pair) {
+        auto& [path, data] = pair;
+
+        // Still within the debounce quiet period
+        if (now - data.lastSeen < m_quietPeriod) {
+            return false;
         }
-        // TODO: erase from map do not emit fileready if file is in "action_performed" state
-        // for example, if an action moves file within the same watched directory, it should not infinitely loop
+
+        // File disappeared or is not a regular file
         if (!m_probe.isRegularFile(path)) {
-            return true; // Erase from map, do NOT emit FileReady
+            return true; // Erase from tracking, do NOT emit
         }
+
+        // File is still being held/written by another process (e.g. large file copy)
         if (!m_probe.isStable(path)) {
-            // Stalled download / still locked by writer:
-            // Refresh timestamp and let it sit for another quietPeriod
-            lastSeen = now;
-            return false; // Keep in map
+            data.lastSeen = now; // Push back timer
+            return false;
         }
-        ready.push_back(FileReady{path});
-        return true; // erase from map and emit
+
+        // File has settled and is safe to process!
+        ready.push_back(FileReady{
+            .path = path,
+            .events = data.accumulatedEvents
+        });
+
+        return true; // Erase from tracking and emit
     });
 
     return ready;
 }
 
-void SettleDetector::pruneMissing(const std::unordered_set<std::filesystem::path> &existingPaths) {
-    std::erase_if(m_lastSeen, [&](const auto& pair) {
+void SettleDetector::pruneMissing(const std::unordered_set<std::filesystem::path>& existingPaths) {
+    std::erase_if(m_pending, [&](const auto& pair) {
         return !existingPaths.contains(pair.first);
     });
 }
 
-std::optional<std::chrono::steady_clock::time_point> SettleDetector::nextDeadline() const {
-    if (m_lastSeen.empty()) {
+std::optional<TimePoint> SettleDetector::nextDeadline() const {
+    if (m_pending.empty()) {
         return std::nullopt;
     }
 
-    // Find the file that was seen earliest
     const auto earliestIt = std::min_element(
-        m_lastSeen.begin(), m_lastSeen.end(),
+        m_pending.begin(), m_pending.end(),
         [](const auto& a, const auto& b) {
-            return a.second < b.second;
+            return a.second.lastSeen < b.second.lastSeen;
         }
     );
 
-    return earliestIt->second + m_quietPeriod;
+    return earliestIt->second.lastSeen + m_quietPeriod;
 }
-

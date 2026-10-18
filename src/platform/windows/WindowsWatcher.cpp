@@ -103,7 +103,7 @@ std::expected<void, WatchError> WindowsWatcher::start(const EventCallback& onEve
             }
 
             if (bytesReturned == 0) {
-                onEvent(Overflow{});
+                onEvent(FileEvent::overflow());
                 continue;
             }
 
@@ -146,8 +146,7 @@ void WindowsWatcher::ProcessEvents(const EventCallback& onEvent, FILE_NOTIFY_INF
 
     auto flushOldName = [&]() {
         if (!pendingOldName.empty()) {
-            // Emits temporary path -> 1 allocation (moved directly into Removed)
-            onEvent(Removed{m_dir_path / pendingOldName});
+            onEvent(FileEvent::removed(m_dir_path / pendingOldName)); // <-- Unified
             pendingOldName = {};
         }
     };
@@ -161,28 +160,29 @@ void WindowsWatcher::ProcessEvents(const EventCallback& onEvent, FILE_NOTIFY_INF
 
         switch (info->Action) {
             case FILE_ACTION_ADDED:
-                onEvent(Created{m_dir_path / nameView});
+                onEvent(FileEvent::created(m_dir_path / nameView));
             break;
             case FILE_ACTION_REMOVED:
-                onEvent(Removed{m_dir_path / nameView});
+                onEvent(FileEvent::removed(m_dir_path / nameView));
             break;
             case FILE_ACTION_MODIFIED:
-                onEvent(Modified{m_dir_path / nameView});
+                onEvent(FileEvent::modified(m_dir_path / nameView));
             break;
             case FILE_ACTION_RENAMED_OLD_NAME:
-                pendingOldName = nameView; // 0 allocations
+                pendingOldName = nameView;
             break;
             case FILE_ACTION_RENAMED_NEW_NAME:
                 if (!pendingOldName.empty()) {
-                    onEvent(Renamed{m_dir_path / pendingOldName, m_dir_path / nameView});
+                    onEvent(FileEvent::renamed(m_dir_path / pendingOldName, m_dir_path / nameView));
                     pendingOldName = {};
                 } else {
-                    onEvent(Created{m_dir_path / nameView});
+                    onEvent(FileEvent::created(m_dir_path / nameView));
                 }
             break;
             default:
                 break;
         }
+
         if (info->NextEntryOffset == 0) break;
 
         info = reinterpret_cast<FILE_NOTIFY_INFORMATION*>(
