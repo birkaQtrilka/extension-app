@@ -88,7 +88,6 @@ int main() {
         bool queue_closed = false;
 
         while (!token.stop_requested()) {
-            // auto event_opt = actions_queue.pop_for(quietPeriod);
             auto now = std::chrono::steady_clock::now();
             for (
                 auto ready_files = detector.collectReady(now);

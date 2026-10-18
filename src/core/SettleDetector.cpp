@@ -34,7 +34,8 @@ std::vector<FileReady> SettleDetector::collectReady(std::chrono::steady_clock::t
         if (now - lastSeen < m_quietPeriod) {
             return false; // Keep waiting
         }
-
+        // TODO: erase from map do not emit fileready if file is in "action_performed" state
+        // for example, if an action moves file within the same watched directory, it should not infinitely loop
         if (!m_probe.isRegularFile(path)) {
             return true; // Erase from map, do NOT emit FileReady
         }
