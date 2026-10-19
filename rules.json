@@ -5,7 +5,17 @@
       "events": ["Created", "Renamed","Init"]
     },
     "actions": [
-      { "type": "moveTo", "destination": "C:\\Saxion\\Courses\\C++\\TestFolder\\Test1" }
+      { "type": "moveTo", "destination": "C:\\Saxion\\Courses\\C++\\TestFolder\\Test2" }
+    ],
+    "stopOnMatch": true
+  },
+  {
+    "match": {
+      "patterns": ["*_nest.*"],
+      "events": ["Created", "Renamed","Init"]
+    },
+    "actions": [
+      { "type": "moveTo", "destination": "C:\\Saxion\\Courses\\C++\\Testing\\NestedFolder" }
     ],
     "stopOnMatch": true
   }

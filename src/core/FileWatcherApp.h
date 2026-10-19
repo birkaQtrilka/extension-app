@@ -44,7 +44,7 @@ public:
             return false;
         }
 
-        const ConfigParser parser(m_config.configPath.string());
+        const ConfigParser parser(m_config.configPath);
         auto parsedRules = parser.parse();
         if (!parsedRules) {
             std::cerr << "Failed to parse config: " << m_config.configPath << '\n';

@@ -13,7 +13,7 @@
 class RuleEngine {
 public:
     explicit RuleEngine(std::vector<Rule> rules) : m_rules(std::move(rules)) {}
-    std::expected<void, ActionError> executeActions(const FileReady& file) const;
+    std::expected<bool, ActionError> executeActions(const FileReady& file) const;
 private:
     std::vector<Rule> m_rules;
 };

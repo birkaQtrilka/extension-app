@@ -4,7 +4,7 @@
 
 #include "RuleEngine.h"
 
-std::expected<void, ActionError> RuleEngine::executeActions(const FileReady &file) const {
+std::expected<bool, ActionError> RuleEngine::executeActions(const FileReady &file) const {
     std::filesystem::path currentPath = file.path;
 
     for (const auto& rule : m_rules) {
@@ -17,7 +17,7 @@ std::expected<void, ActionError> RuleEngine::executeActions(const FileReady &fil
                 return std::unexpected( result.error());
             }
 
-            if (result->state == FileState::Moved || result->state == FileState::Deleted) {
+            if (result->state == FileState::Deleted) {
                 return {}; // No file left to perform actions on
             }
         }

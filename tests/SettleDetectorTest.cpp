@@ -28,8 +28,8 @@ TEST_CASE("Modified refreshes the quiet period") {
     SettleDetector detector(500ms, probe);
     const auto t0 = std::chrono::steady_clock::now();
 
-    detector.onEvent(Created{"a.pdf"}, t0);
-    detector.onEvent(Modified{"a.pdf"}, t0 + 400ms);
+    detector.onEvent(FileEvent::created("a.pdf"), t0);
+    detector.onEvent(FileEvent::modified("a.pdf"), t0 + 400ms);
 
     // At 600ms: only 200ms has elapsed since the last Modified -> not ready yet
     REQUIRE(detector.collectReady(t0 + 600ms).empty());
@@ -47,7 +47,7 @@ TEST_CASE("Unstable refreshes the quiet period") {
     SettleDetector detector(500ms, probe);
     const auto t0 = std::chrono::steady_clock::now();
 
-    detector.onEvent(Created{"a.pdf"}, t0);
+    detector.onEvent(FileEvent::created("a.pdf"), t0);
     probe.setStable(false);
     // should be empty and reset the timer to be at t0 + n
     REQUIRE(detector.collectReady(t0 + 600ms).empty());
@@ -67,9 +67,9 @@ TEST_CASE("Create and delete returns nothing") {
     SettleDetector detector(500ms, probe);
     const auto t0 = std::chrono::steady_clock::now();
 
-    detector.onEvent(Created{"a.pdf"}, t0);
-    detector.onEvent(Removed{"a.pdf"}, t0 + 10ms);
-    detector.onEvent(Created{"b.pdf"}, t0);
+    detector.onEvent(FileEvent::created("a.pdf"), t0);
+    detector.onEvent(FileEvent::removed("a.pdf"), t0 + 10ms);
+    detector.onEvent(FileEvent::created("a.pdf"), t0);
 
     REQUIRE(detector.collectReady(t0 + 600ms).size() == 1);
 }
@@ -80,9 +80,9 @@ TEST_CASE("Overflow does not lose pending files") {
     SettleDetector detector(500ms, probe);
     const auto t0 = std::chrono::steady_clock::now();
 
-    detector.onEvent(Created{"a.pdf"}, t0);
-    detector.onEvent(Created{"b.pdf"}, t0);
-    detector.onEvent(Overflow{}, t0 + 10ms);
+    detector.onEvent(FileEvent::created("a.pdf"), t0);
+    detector.onEvent(FileEvent::created("b.pdf"), t0);
+    detector.onEvent(FileEvent::overflow(), t0 + 10ms);
 
     REQUIRE(detector.collectReady(t0 + 600ms).size() == 2);
 }

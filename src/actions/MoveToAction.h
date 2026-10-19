@@ -11,7 +11,7 @@ class MoveToAction final : public IAction {
 public:
     explicit MoveToAction(path dest) : destinationDir_(std::move(dest)) {}
 
-    ActionResult execute(path& currentPath) override {
+    ActionResult execute(path& currentPath) const override {
         std::error_code ec;
         std::filesystem::create_directories(destinationDir_, ec);
         if (ec) {
@@ -24,6 +24,7 @@ public:
         }
 
         const path target = destinationDir_ / currentPath.filename();
+        if (target == currentPath) return ActionSuccess{FileState::Preserved};
         std::filesystem::rename(currentPath, target, ec);
         if (ec) {
             return std::unexpected(ActionError{
