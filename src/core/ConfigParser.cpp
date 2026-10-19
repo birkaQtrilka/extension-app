@@ -8,6 +8,7 @@
 #include <expected>
 #include <algorithm>
 #include <cctype>
+#include <memory>
 
 #include "actions/MoveToAction.h"
 
@@ -16,7 +17,7 @@ namespace {
     // Helper: Converts glob-style wildcard string (e.g., "*.cv") to a regex string (e.g., "^.*\.cv$")
     std::string globToRegexString(const std::string& glob) {
         std::string regexStr = "^";
-        for (char c : glob) {
+        for (const char c : glob) {
             switch (c) {
                 case '*': regexStr += ".*"; break;
                 case '?': regexStr += "."; break;
@@ -40,15 +41,24 @@ namespace {
     // Helper: Parse event string dynamically to EventKind
     EventKind stringToEventKind(const std::string& eventStr) {
         std::string lowerStr = eventStr;
-        std::transform(lowerStr.begin(), lowerStr.end(), lowerStr.begin(),
-                       [](unsigned char c){ return std::tolower(c); });
+        std::ranges::transform(lowerStr, lowerStr.begin(),
+                               [](const unsigned char c){ return std::tolower(c); });
 
         if (lowerStr == "created") return EventKind::Created;
         if (lowerStr == "renamed") return EventKind::Renamed;
         if (lowerStr == "init") return EventKind::Init;
-        // Add more event mappings if needed (e.g., Modified, Deleted)
 
         return EventKind::None;
+    }
+
+    std::expected<std::unique_ptr<IAction>, std::string> stringToAction(const std::string& actionName, const std::string& destination) {
+        if (actionName == "moveTo") {
+            return std::make_unique<MoveToAction>(destination);
+            // } else if (actionType == "copyTo") {
+            // rule.actions.push_back(std::make_unique<CopyAction>(destination));
+        } else {
+            return std::unexpected(std::string("Unknown action type: ") + actionName);
+        }
     }
 
 } // anonymous namespace
@@ -77,10 +87,9 @@ std::expected<std::vector<Rule>, std::string> ConfigParser::parse() const {
         for (const auto& jsonRule : jsonConfig) {
             Rule rule;
 
-            // 1. Parse stopOnMatch (optional, defaults to true as per your struct)
             rule.stopOnMatch = jsonRule.value("stopOnMatch", true);
 
-            // 2. Parse match conditions
+            // Parse match conditions
             if (jsonRule.contains("match") && jsonRule["match"].is_object()) {
                 const auto& matchObj = jsonRule["match"];
 
@@ -103,7 +112,7 @@ std::expected<std::vector<Rule>, std::string> ConfigParser::parse() const {
                 return std::unexpected(std::string("A rule is missing the 'match' object."));
             }
 
-            // 3. Parse actions
+            // Parse actions
             if (jsonRule.contains("actions") && jsonRule["actions"].is_array()) {
                 for (const auto& actionObj : jsonRule["actions"]) {
                     if (!actionObj.contains("type")) {
@@ -112,15 +121,9 @@ std::expected<std::vector<Rule>, std::string> ConfigParser::parse() const {
 
                     std::string actionType = actionObj["type"].get<std::string>();
                     std::string destination = actionObj.value("destination", "");
-
-                    // Dispatch to concrete IAction instances
-                    if (actionType == "moveTo") {
-                        rule.actions.push_back(std::make_unique<MoveToAction>(destination));
-                    // } else if (actionType == "copyTo") {
-                        // rule.actions.push_back(std::make_unique<CopyAction>(destination));
-                    } else {
-                        return std::unexpected(std::string("Unknown action type: ") + actionType);
-                    }
+                    auto expectedAction = stringToAction(actionType, destination);
+                    if (!expectedAction) return std::unexpected(expectedAction.error());
+                    rule.actions.push_back(std::move(expectedAction.value()));
                 }
             } else {
                 return std::unexpected(std::string("A rule is missing the 'actions' array."));

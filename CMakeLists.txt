@@ -41,6 +41,9 @@ add_executable(extension_app src/main.cpp
         src/actions/MoveToAction.h
         src/core/EventKind.h
         src/core/Rule.h
+        src/core/EventProcessor.cpp
+        src/core/EventProcessor.h
+        src/core/FileWatcherApp.h
 )
 target_include_directories(extension_app PRIVATE src)
 
