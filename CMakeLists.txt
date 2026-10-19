@@ -7,6 +7,12 @@ configure_file(
         "${CMAKE_BINARY_DIR}/rules.json"
         COPYONLY
 )
+configure_file(
+        "${CMAKE_SOURCE_DIR}/settings.json"
+        "${CMAKE_BINARY_DIR}/settings.json"
+        COPYONLY
+)
+
 
 # Catch2 v3 from GitHub
 include(FetchContent)
@@ -44,6 +50,8 @@ add_executable(extension_app src/main.cpp
         src/core/EventProcessor.cpp
         src/core/EventProcessor.h
         src/core/FileWatcherApp.h
+        src/core/SettingsParser.h
+        src/core/SettingsParser.cpp
 )
 target_include_directories(extension_app PRIVATE src)
 
