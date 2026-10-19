@@ -52,6 +52,7 @@ add_executable(extension_app src/main.cpp
         src/core/FileWatcherApp.h
         src/core/SettingsParser.h
         src/core/SettingsParser.cpp
+        src/actions/RemovePatternAction.h
 )
 target_include_directories(extension_app PRIVATE src)
 

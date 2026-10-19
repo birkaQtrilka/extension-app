@@ -1,21 +1,12 @@
 [
   {
     "match": {
-      "patterns": ["*_cv.*", "*.cv"],
+      "patterns": ["*_tg.*"],
       "events": ["Created", "Renamed","Init"]
     },
     "actions": [
-      { "type": "moveTo", "destination": "C:\\Saxion\\Courses\\C++\\TestFolder\\Test2" }
-    ],
-    "stopOnMatch": true
-  },
-  {
-    "match": {
-      "patterns": ["*_nest.*"],
-      "events": ["Created", "Renamed","Init"]
-    },
-    "actions": [
-      { "type": "moveTo", "destination": "C:\\Saxion\\Courses\\C++\\Testing\\NestedFolder" }
+      { "type": "moveTo", "destination": "C:\\Saxion\\Courses\\C++\\TestFolder\\Test2" },
+      { "type": "removePattern", "pattern": "_tg" }
     ],
     "stopOnMatch": true
   }

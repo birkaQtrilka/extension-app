@@ -11,6 +11,7 @@
 #include <memory>
 
 #include "actions/MoveToAction.h"
+#include "actions/RemovePatternAction.h"
 
 namespace {
 
@@ -51,14 +52,23 @@ namespace {
         return EventKind::None;
     }
 
-    std::expected<std::unique_ptr<IAction>, std::string> stringToAction(const std::string& actionName, const std::string& destination) {
+    std::expected<std::unique_ptr<IAction>, std::string> stringToAction(
+        const std::string& actionName,
+        const nlohmann::json& actionJson,
+        const Rule& rule) {
         if (actionName == "moveTo") {
+            std::string destination = actionJson.value("destination", "");
             return std::make_unique<MoveToAction>(destination);
-            // } else if (actionType == "copyTo") {
-            // rule.actions.push_back(std::make_unique<CopyAction>(destination));
-        } else {
-            return std::unexpected(std::string("Unknown action type: ") + actionName);
         }
+        if (actionName == "removePattern") {
+            std::string patternStr = actionJson.value("pattern", "");
+            if (patternStr.empty()) {
+                return std::unexpected("Missing 'pattern' property in removePattern action");
+            }
+            // Compile regex without '^', '$', or wildcards so it only matches the substring
+            return std::make_unique<RemovePatternAction>(std::regex(patternStr));
+        }
+        return std::unexpected(std::string("Unknown action type: ") + actionName);
     }
 
 } // anonymous namespace
@@ -120,8 +130,8 @@ std::expected<std::vector<Rule>, std::string> ConfigParser::parse() const {
                     }
 
                     std::string actionType = actionObj["type"].get<std::string>();
-                    std::string destination = actionObj.value("destination", "");
-                    auto expectedAction = stringToAction(actionType, destination);
+
+                    auto expectedAction = stringToAction(actionType, actionObj, rule);
                     if (!expectedAction) return std::unexpected(expectedAction.error());
                     rule.actions.push_back(std::move(expectedAction.value()));
                 }
