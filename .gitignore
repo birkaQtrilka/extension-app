@@ -38,3 +38,5 @@ CPackSourceConfig.cmake
 
 .DS_Store
 Thumbs.db
+
+.env

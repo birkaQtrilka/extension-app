@@ -12,10 +12,40 @@ configure_file(
         "${CMAKE_BINARY_DIR}/settings.json"
         COPYONLY
 )
+configure_file(
+        "${CMAKE_SOURCE_DIR}/.env"
+        "${CMAKE_BINARY_DIR}/.env"
+        COPYONLY
+)
+include(FetchContent)
+FetchContent_Declare(
+        curl
+        URL https://curl.se/download/curl-8.22.0.tar.xz
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
 
+block()
+    set(BUILD_CURL_EXE OFF)
+    set(BUILD_EXAMPLES OFF)
+    set(BUILD_LIBCURL_DOCS OFF)
+    set(BUILD_MISC_DOCS OFF)
+    set(BUILD_TESTING OFF)
+
+    set(BUILD_SHARED_LIBS OFF)
+    set(BUILD_STATIC_LIBS ON)
+
+    # Disable optional features whose dependencies aren't installed.
+    set(CURL_USE_LIBPSL OFF)
+
+    # Use Windows' native TLS implementation.
+    if(WIN32)
+        set(CURL_USE_SCHANNEL ON)
+    endif()
+
+    FetchContent_MakeAvailable(curl)
+endblock()
 
 # Catch2 v3 from GitHub
-include(FetchContent)
 FetchContent_Declare(
         Catch2
         GIT_REPOSITORY https://github.com/catchorg/Catch2.git
@@ -53,6 +83,14 @@ add_executable(extension_app src/main.cpp
         src/core/SettingsParser.h
         src/core/SettingsParser.cpp
         src/actions/RemovePatternAction.h
+        src/actions/SendToTelegramAction.h
+        src/core/TelegramClient.cpp
+        src/core/TelegramClient.h
+        src/core/Helpers/DotEnv.cpp
+        src/core/Helpers/DotEnv.h
+        src/actions/ActionFactory.cpp
+        src/actions/ActionFactory.h
+        src/actions/ActionRegistry.h
 )
 target_include_directories(extension_app PRIVATE src)
 
@@ -65,7 +103,10 @@ add_executable(unit_tests
 target_include_directories(unit_tests PRIVATE src tests)
 # 3. Link Catch2 (Catch2WithMain provides int main() automatically!)
 target_link_libraries(unit_tests PRIVATE Catch2::Catch2WithMain)
-target_link_libraries(extension_app PRIVATE nlohmann_json::nlohmann_json)
+target_link_libraries(extension_app PRIVATE
+        nlohmann_json::nlohmann_json
+        CURL::libcurl
+)
 
 # 4. Enable test discovery in your IDE
 include(CTest)

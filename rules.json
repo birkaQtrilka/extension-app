@@ -2,9 +2,10 @@
   {
     "match": {
       "patterns": ["*_tg.*"],
-      "events": ["Created", "Renamed","Init"]
+      "events": ["Created", "Renamed", "Init"]
     },
     "actions": [
+      { "type": "sendToTelegram", "sendMethod": "txt" },
       { "type": "moveTo", "destination": "C:\\Saxion\\Courses\\C++\\TestFolder\\Test2" },
       { "type": "removePattern", "pattern": "_tg" }
     ],

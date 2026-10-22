@@ -8,13 +8,11 @@
 #include <expected>
 #include <algorithm>
 #include <cctype>
-#include <memory>
 
-#include "actions/MoveToAction.h"
+#include "TelegramClient.h"
 #include "actions/RemovePatternAction.h"
 
 namespace {
-
     // Helper: Converts glob-style wildcard string (e.g., "*.cv") to a regex string (e.g., "^.*\.cv$")
     std::string globToRegexString(const std::string& glob) {
         std::string regexStr = "^";
@@ -51,26 +49,6 @@ namespace {
 
         return EventKind::None;
     }
-
-    std::expected<std::unique_ptr<IAction>, std::string> stringToAction(
-        const std::string& actionName,
-        const nlohmann::json& actionJson,
-        const Rule& rule) {
-        if (actionName == "moveTo") {
-            std::string destination = actionJson.value("destination", "");
-            return std::make_unique<MoveToAction>(destination);
-        }
-        if (actionName == "removePattern") {
-            std::string patternStr = actionJson.value("pattern", "");
-            if (patternStr.empty()) {
-                return std::unexpected("Missing 'pattern' property in removePattern action");
-            }
-            // Compile regex without '^', '$', or wildcards so it only matches the substring
-            return std::make_unique<RemovePatternAction>(std::regex(patternStr));
-        }
-        return std::unexpected(std::string("Unknown action type: ") + actionName);
-    }
-
 } // anonymous namespace
 
 
@@ -130,8 +108,7 @@ std::expected<std::vector<Rule>, std::string> ConfigParser::parse() const {
                     }
 
                     std::string actionType = actionObj["type"].get<std::string>();
-
-                    auto expectedAction = stringToAction(actionType, actionObj, rule);
+                    auto expectedAction = m_actionFactory.create(actionType, actionObj);
                     if (!expectedAction) return std::unexpected(expectedAction.error());
                     rule.actions.push_back(std::move(expectedAction.value()));
                 }

@@ -15,6 +15,7 @@
 #include "RuleEngine.h"
 #include "SettleDetector.h"
 #include "ThreadSafeQueue.h"
+#include "actions/ActionFactory.h"
 
 struct AppConfig {
     std::filesystem::path watchPath;
@@ -26,11 +27,22 @@ template <typename Watcher, typename Probe>
     requires std::derived_from<Watcher, IFolderWatcher> &&
              std::derived_from<Probe, IFileProbe>
 class FileWatcherApp {
+    AppConfig m_config;
+    ThreadSafeQueue<FileEvent> m_queue;
+    Watcher m_watcher;
+    Probe m_probe;
+    std::optional<EventProcessor> m_processor;
+    ActionFactory m_action_fac;
+
+    std::jthread m_producerThread;
+    std::jthread m_consumerThread;
+
 public:
-    explicit FileWatcherApp(AppConfig config, Probe probe)
+    explicit FileWatcherApp(AppConfig config, Probe probe, ActionFactory actionFactory)
         : m_config(std::move(config))
         , m_watcher(m_config.watchPath)
         , m_probe(std::move(probe))
+        , m_action_fac(std::move(actionFactory))
     {}
 
     ~FileWatcherApp() {
@@ -44,10 +56,10 @@ public:
             return false;
         }
 
-        const ConfigParser parser(m_config.configPath);
+        const ConfigParser parser(m_config.configPath, m_action_fac);
         auto parsedRules = parser.parse();
         if (!parsedRules) {
-            std::cerr << "Failed to parse config: " << m_config.configPath << '\n';
+            std::cerr << "Failed to parse config: " << parsedRules.error() << " at: " << m_config.configPath << '\n';
             return false;
         }
 
@@ -99,14 +111,4 @@ public:
 
         // std::jthread members automatically join here when destroyed
     }
-
-private:
-    AppConfig m_config;
-    ThreadSafeQueue<FileEvent> m_queue;
-    Watcher m_watcher;
-    Probe m_probe;
-    std::optional<EventProcessor> m_processor;
-
-    std::jthread m_producerThread;
-    std::jthread m_consumerThread;
 };

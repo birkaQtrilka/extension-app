@@ -10,13 +10,16 @@
 #include <string>
 #include <filesystem>
 #include "Rule.h"
+#include "actions/ActionFactory.h"
 
 class ConfigParser {
-public:
-    explicit ConfigParser(std::filesystem::path file) : m_file(std::move(file)) {};
-    [[nodiscard]] std::expected<std::vector<Rule>, std::string> parse() const;
 private:
     std::filesystem::path m_file;
+    const ActionFactory& m_actionFactory;
+public:
+    explicit ConfigParser(std::filesystem::path file, const ActionFactory& action_factory)
+    : m_file(std::move(file)), m_actionFactory(action_factory) {}
+    [[nodiscard]] std::expected<std::vector<Rule>, std::string> parse() const;
 };
 
 
