@@ -10,7 +10,7 @@
 #include <cctype>
 
 #include "TelegramClient.h"
-#include "actions/RemovePatternAction.h"
+#include "actions/implementations/RemovePatternAction.h"
 
 namespace {
     // Helper: Converts glob-style wildcard string (e.g., "*.cv") to a regex string (e.g., "^.*\.cv$")

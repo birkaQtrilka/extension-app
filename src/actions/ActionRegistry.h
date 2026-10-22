@@ -8,9 +8,9 @@
 #include <nlohmann/json.hpp>
 
 #include "ActionFactory.h"
-#include "MoveToAction.h"
-#include "RemovePatternAction.h"
-#include "SendToTelegramAction.h"
+#include "implementations/MoveToAction.h"
+#include "implementations/RemovePatternAction.h"
+#include "implementations/SendToTelegramAction.h"
 
 struct ActionRegistry {
 private:

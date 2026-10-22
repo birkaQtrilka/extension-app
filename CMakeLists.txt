@@ -74,7 +74,7 @@ add_executable(extension_app src/main.cpp
         src/core/RuleEngine.h
         src/core/ConfigParser.cpp
         src/core/ConfigParser.h
-        src/actions/MoveToAction.h
+        src/actions/implementations/MoveToAction.h
         src/core/EventKind.h
         src/core/Rule.h
         src/core/EventProcessor.cpp
@@ -82,8 +82,8 @@ add_executable(extension_app src/main.cpp
         src/core/FileWatcherApp.h
         src/core/SettingsParser.h
         src/core/SettingsParser.cpp
-        src/actions/RemovePatternAction.h
-        src/actions/SendToTelegramAction.h
+        src/actions/implementations/RemovePatternAction.h
+        src/actions/implementations/SendToTelegramAction.h
         src/core/TelegramClient.cpp
         src/core/TelegramClient.h
         src/core/Helpers/DotEnv.cpp
