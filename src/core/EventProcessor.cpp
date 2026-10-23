@@ -1,18 +1,18 @@
-
 #include "EventProcessor.h"
 
 #include <iostream>
 #include <system_error>
 #include <unordered_set>
 #include <utility>
+
 std::string describe(const FileEvent& event) {
     switch (event.kind) {
-        case EventKind::Created:  return "Created: " + event.path.string();
-        case EventKind::Modified: return "Modified: " + event.path.string();
-        case EventKind::Removed:  return "Removed: " + event.path.string();
-        case EventKind::Renamed:  return "Renamed: from " + event.oldPath.string() + " to " + event.path.string();
-        case EventKind::Overflow: return "Overflow error detected";
-        default:                  return "Unknown event";
+        case FileEvent::Kind::Init:     return "Init: " + event.path.string();
+        case FileEvent::Kind::Created:  return "Created: " + event.path.string();
+        case FileEvent::Kind::Modified: return "Modified: " + event.path.string();
+        case FileEvent::Kind::Removed:  return "Removed: " + event.path.string();
+        case FileEvent::Kind::Renamed:  return "Renamed: from " + event.oldPath.string() + " to " + event.path.string();
+        default:                        return "Unknown event";
     }
 }
 
@@ -21,7 +21,7 @@ void describe2(const FileEvent& event) {
 }
 
 EventProcessor::EventProcessor(
-    ThreadSafeQueue<FileEvent>& queue,
+    ThreadSafeQueue<WatcherMessage>& queue,
     SettleDetector detector,
     RuleEngine ruleEngine,
     std::filesystem::path watchDir
@@ -33,40 +33,32 @@ EventProcessor::EventProcessor(
 {}
 
 void EventProcessor::run(const std::stop_token& token) {
-    // Initial reconciliation
     auto startupTime = std::chrono::steady_clock::now();
-    rescanDirectory(startupTime, FileEvent::init);
+
+    // Initial scan uses Init events
+    rescanDirectory(startupTime, FileEvent::Kind::Init);
 
     while (!token.stop_requested()) {
         auto now = std::chrono::steady_clock::now();
-
         processReadyFiles(now);
 
         auto deadline = m_detector.nextDeadline();
-        auto result = deadline
-            ? m_queue.pop_until(*deadline)
-            : m_queue.pop();
+        auto result = deadline ? m_queue.pop_until(*deadline) : m_queue.pop();
 
         if (!result) {
-            if (result.error() == PopFailure::Closed) {
-                // Queue closed: discard and exit
-                break;
-            }
-
-            // Timeout: let processReadyFiles() pick up ready files
-            continue;
+            if (result.error() == PopFailure::Closed) break;
+            continue; // Timeout
         }
 
         now = std::chrono::steady_clock::now();
 
-        if (result->kind == EventKind::Overflow) {
-            std::cout << "[Rescan] Buffer overflow detected. Rescanning "
-                      << m_watchDir << "...\n";
-
-            rescanDirectory(now, FileEvent::modified);
+        if (std::holds_alternative<BufferOverflow>(*result)) {
+            std::cout << "[Rescan] Buffer overflow detected. Rescanning " << m_watchDir << "...\n";
+            rescanDirectory(now, FileEvent::Kind::Modified);
         } else {
-            m_detector.onEvent(*result, now);
-            std::cout << describe(*result) << '\n';
+            const auto& fileEvent = std::get<FileEvent>(*result);
+            m_detector.onEvent(fileEvent, now);
+            std::cout << describe(fileEvent) << '\n';
         }
     }
 }
@@ -94,7 +86,7 @@ void EventProcessor::processReadyFiles(
 
 void EventProcessor::rescanDirectory(
     std::chrono::steady_clock::time_point now,
-    const std::function<FileEvent(std::filesystem::path)>& eventCreator
+    FileEvent::Kind kind
 ) {
     std::unordered_set<std::filesystem::path> currentFiles;
     std::error_code ec;
@@ -116,7 +108,11 @@ void EventProcessor::rescanDirectory(
             const auto& path = entry.path();
 
             currentFiles.insert(path);
-            m_detector.onEvent(eventCreator(path), now);
+            m_detector.onEvent(FileEvent{
+                .kind = kind,
+                .path = path,
+                .oldPath = {}
+            }, now);
         }
     }
 

@@ -4,20 +4,21 @@
 
 #ifndef RULE_H
 #define RULE_H
-#include "EventKind.h"
 #include <regex>
 #include "IAction.h"
 #include <filesystem>
 
+#include "FileEvent.h"
+
 struct Rule {
-    EventKind triggerEvents = EventKind::None;
+    FileChangeFlags triggerEvents = FileChangeFlags::None;
     std::vector<std::regex> compiledPatterns;
     std::vector<std::unique_ptr<IAction>> actions;
     bool stopOnMatch = true;
 
-    [[nodiscard]] bool matches(const std::filesystem::path& path, EventKind event) const {
+    [[nodiscard]] bool matches(const std::filesystem::path& path, FileChangeFlags event) const {
         // 1. Bitmask check (instant reject)
-        if ((triggerEvents & event) == EventKind::None) {
+        if ((triggerEvents & event) == FileChangeFlags::None) {
             return false;
         }
 

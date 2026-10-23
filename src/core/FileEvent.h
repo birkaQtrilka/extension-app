@@ -1,35 +1,79 @@
 #pragma once
 #include <filesystem>
-#include "EventKind.h"
+#include <variant>
+#include <string>
+#include <cstdint>
+
+enum class FileChangeFlags : uint8_t {
+    None     = 0,
+    Init     = 1 << 0,
+    Created  = 1 << 1,
+    Modified = 1 << 2,
+    Renamed  = 1 << 3,
+};
+
+constexpr FileChangeFlags operator|(FileChangeFlags a, FileChangeFlags b) noexcept {
+    return static_cast<FileChangeFlags>(static_cast<uint8_t>(a) | static_cast<uint8_t>(b));
+}
+constexpr FileChangeFlags operator&(FileChangeFlags a, FileChangeFlags b) noexcept {
+    return static_cast<FileChangeFlags>(static_cast<uint8_t>(a) & static_cast<uint8_t>(b));
+}
+constexpr FileChangeFlags& operator|=(FileChangeFlags& a, FileChangeFlags b) noexcept {
+    return a = (a | b);
+}
+constexpr bool hasFlag(FileChangeFlags mask, FileChangeFlags flag) noexcept {
+    return (mask & flag) != FileChangeFlags::None;
+}
 
 struct FileEvent {
-    EventKind kind = EventKind::None;
-    std::filesystem::path path;     // Target/current path
-    std::filesystem::path oldPath;  // Populated only when kind is Renamed ('from')
+    enum class Kind : uint8_t {
+        Init,
+        Created,
+        Modified,
+        Removed,
+        Renamed
+    };
 
-    // Factory helpers for convenience
+    Kind kind;
+    std::filesystem::path path;
+    std::filesystem::path oldPath;
+
+    // Factory methods
+    static FileEvent init(std::filesystem::path p) {
+        return { Kind::Init, std::move(p), {} };
+    }
     static FileEvent created(std::filesystem::path p) {
-        return { EventKind::Created, std::move(p), {} };
+        return { Kind::Created, std::move(p), {} };
     }
     static FileEvent modified(std::filesystem::path p) {
-        return { EventKind::Modified, std::move(p), {} };
+        return { Kind::Modified, std::move(p), {} };
     }
     static FileEvent removed(std::filesystem::path p) {
-        return { EventKind::Removed, std::move(p), {} };
+        return { Kind::Removed, std::move(p), {} };
     }
     static FileEvent renamed(std::filesystem::path from, std::filesystem::path to) {
-        return { EventKind::Renamed, std::move(to), std::move(from) };
+        return { Kind::Renamed, std::move(to), std::move(from) };
     }
-    static FileEvent overflow() {
-        return { EventKind::Overflow, {}, {} };
-    }
-    static FileEvent init(std::filesystem::path p) {
-        return { EventKind::Init, {p}, {} };
+
+    [[nodiscard]] FileChangeFlags toChangeFlag() const noexcept {
+        switch (kind) {
+            case Kind::Init:     return FileChangeFlags::Init;
+            case Kind::Created:  return FileChangeFlags::Created;
+            case Kind::Modified: return FileChangeFlags::Modified;
+            case Kind::Renamed:  return FileChangeFlags::Renamed;
+            case Kind::Removed:  return FileChangeFlags::None;
+        }
+        return FileChangeFlags::None;
     }
 };
 
-// Ready-file after debounce/settling (can even reuse FileEvent, or alias it)
+// Control message (no dummy paths!)
+struct BufferOverflow {};
+
+// Variant passed across threads
+using WatcherMessage = std::variant<FileEvent, BufferOverflow>;
+
 struct FileReady {
     std::filesystem::path path;
-    EventKind events = EventKind::None; // Cumulative mask of what happened to it
+    FileChangeFlags events = FileChangeFlags::None;
 };

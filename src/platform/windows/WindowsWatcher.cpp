@@ -103,7 +103,7 @@ std::expected<void, WatchError> WindowsWatcher::start(const EventCallback& onEve
             }
 
             if (bytesReturned == 0) {
-                onEvent(FileEvent::overflow());
+                onEvent(BufferOverflow{});
                 continue;
             }
 

@@ -75,7 +75,6 @@ add_executable(extension_app src/main.cpp
         src/core/ConfigParser.cpp
         src/core/ConfigParser.h
         src/actions/implementations/MoveToAction.h
-        src/core/EventKind.h
         src/core/Rule.h
         src/core/EventProcessor.cpp
         src/core/EventProcessor.h

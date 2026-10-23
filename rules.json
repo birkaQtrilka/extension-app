@@ -5,9 +5,29 @@
       "events": ["Created", "Renamed", "Init"]
     },
     "actions": [
-      { "type": "sendToTelegram", "sendMethod": "txt" },
-      { "type": "moveTo", "destination": "C:\\Saxion\\Courses\\C++\\TestFolder\\Test2" },
+      { "type": "sendToTelegram", "sendMethod": "file" },
       { "type": "removePattern", "pattern": "_tg" }
+    ],
+    "stopOnMatch": true
+  },
+  {
+    "match": {
+      "patterns": ["*_tgt.*"],
+      "events": ["Created", "Renamed", "Init"]
+    },
+    "actions": [
+      { "type": "sendToTelegram", "sendMethod": "txt" },
+      { "type": "removePattern", "pattern": "_tgt" }
+    ],
+    "stopOnMatch": true
+  },
+  {
+    "match": {
+      "patterns": ["*cv*"],
+      "events": ["Created", "Renamed", "Init"]
+    },
+    "actions": [
+      { "type": "moveTo", "destination": "C:\\Users\\Birka\\OneDrive\\Documents\\My Documents\\CVs" }
     ],
     "stopOnMatch": true
   }

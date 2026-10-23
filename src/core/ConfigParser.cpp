@@ -37,17 +37,12 @@ namespace {
         return regexStr;
     }
 
-    // Helper: Parse event string dynamically to EventKind
-    EventKind stringToEventKind(const std::string& eventStr) {
-        std::string lowerStr = eventStr;
-        std::ranges::transform(lowerStr, lowerStr.begin(),
-                               [](const unsigned char c){ return std::tolower(c); });
-
-        if (lowerStr == "created") return EventKind::Created;
-        if (lowerStr == "renamed") return EventKind::Renamed;
-        if (lowerStr == "init") return EventKind::Init;
-
-        return EventKind::None;
+    FileChangeFlags stringToChangeFlag(std::string_view str) {
+        if (str == "created" || str == "Created")   return FileChangeFlags::Created;
+        if (str == "modified" || str == "Modified") return FileChangeFlags::Modified;
+        if (str == "renamed" || str == "Renamed")   return FileChangeFlags::Renamed;
+        if (str == "init" || str == "Init")         return FileChangeFlags::Init;
+        return FileChangeFlags::None;
     }
 } // anonymous namespace
 
@@ -86,14 +81,14 @@ std::expected<std::vector<Rule>, std::string> ConfigParser::parse() const {
                     for (const auto& pat : matchObj["patterns"]) {
                         std::string globPattern = pat.get<std::string>();
                         std::string regexStr = globToRegexString(globPattern);
-                        rule.compiledPatterns.emplace_back(regexStr);
+                        rule.compiledPatterns.emplace_back(regexStr, std::regex_constants::icase);
                     }
                 }
 
                 // Parse events
                 if (matchObj.contains("events") && matchObj["events"].is_array()) {
                     for (const auto& ev : matchObj["events"]) {
-                        rule.triggerEvents = rule.triggerEvents | stringToEventKind(ev.get<std::string>());
+                        rule.triggerEvents = rule.triggerEvents | stringToChangeFlag(ev.get<std::string>());
                     }
                 }
             } else {

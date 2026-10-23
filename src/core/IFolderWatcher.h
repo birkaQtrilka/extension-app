@@ -38,7 +38,7 @@ struct std::formatter<WatchError> : std::formatter<std::string_view> {
 class IFolderWatcher {
 public:
     virtual ~IFolderWatcher() = default;
-    using EventCallback = std::function<void(FileEvent)>;
+    using EventCallback = std::function<void(WatcherMessage)>;
     virtual std::expected<void, WatchError>
         start(const EventCallback& onEvent, std::stop_token stop) = 0;
     [[nodiscard]] virtual std::filesystem::path getWatchedDir() const = 0;

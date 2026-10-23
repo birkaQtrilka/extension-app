@@ -16,7 +16,7 @@ public:
     // This internal struct tracks files that are currently debouncing
     struct PendingEntry {
         TimePoint lastSeen;
-        EventKind accumulatedEvents = EventKind::None;
+        FileChangeFlags accumulatedEvents = FileChangeFlags::None;
     };
 
     explicit SettleDetector(const std::chrono::milliseconds quietPeriod, const IFileProbe& probe)

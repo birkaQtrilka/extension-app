@@ -28,7 +28,7 @@ template <typename Watcher, typename Probe>
              std::derived_from<Probe, IFileProbe>
 class FileWatcherApp {
     AppConfig m_config;
-    ThreadSafeQueue<FileEvent> m_queue;
+    ThreadSafeQueue<WatcherMessage> m_queue;
     Watcher m_watcher;
     Probe m_probe;
     std::optional<EventProcessor> m_processor;
@@ -81,8 +81,8 @@ public:
 
         // Producer thread
         m_producerThread = std::jthread([this](const std::stop_token& token) {
-            auto expect = m_watcher.start([this](FileEvent event) {
-                if (!m_queue.push(std::move(event))) {
+            auto expect = m_watcher.start([this](WatcherMessage message) {
+                if (!m_queue.push(std::move(message))) {
                     std::cerr << "Queue closed. Failed to push event.\n";
                 }
             }, token);

@@ -2,35 +2,28 @@
 
 void SettleDetector::onEvent(const FileEvent& event, TimePoint now) {
     switch (event.kind) {
-        case EventKind::Created:
-        case EventKind::Init:
-        case EventKind::Modified: {
+        case FileEvent::Kind::Init:
+        case FileEvent::Kind::Created:
+        case FileEvent::Kind::Modified: {
             auto& entry = m_pending[event.path];
             entry.lastSeen = now;
-            entry.accumulatedEvents |= event.kind;
+            entry.accumulatedEvents |= event.toChangeFlag();
             break;
         }
 
-        case EventKind::Removed: {
-            // File was deleted before quietPeriod expired; drop tracking
+        case FileEvent::Kind::Removed: {
             m_pending.erase(event.path);
             break;
         }
 
-        case EventKind::Renamed: {
-            // Cancel debounce on the old path
+        case FileEvent::Kind::Renamed: {
             m_pending.erase(event.oldPath);
-
-            // Start debounce on the destination path
             auto& entry = m_pending[event.path];
             entry.lastSeen = now;
-            entry.accumulatedEvents |= EventKind::Renamed;
+            entry.accumulatedEvents |= FileChangeFlags::Renamed;
             break;
         }
-
-        case EventKind::Overflow:
-        case EventKind::None:
-            break;
+        // Notice: NO Overflow case needed here at all!
     }
 }
 

@@ -13,7 +13,7 @@
 class EventProcessor {
 public:
     EventProcessor(
-        ThreadSafeQueue<FileEvent>& queue,
+        ThreadSafeQueue<WatcherMessage>& queue,
         SettleDetector detector,
         RuleEngine ruleEngine,
         std::filesystem::path watchDir
@@ -25,12 +25,9 @@ public:
 private:
     void processReadyFiles(std::chrono::steady_clock::time_point now);
 
-    void rescanDirectory(
-        std::chrono::steady_clock::time_point now,
-        const std::function<FileEvent(std::filesystem::path)>& eventCreator
-    );
+    void rescanDirectory(std::chrono::steady_clock::time_point now, FileEvent::Kind kind);
 
-    ThreadSafeQueue<FileEvent>& m_queue;
+    ThreadSafeQueue<WatcherMessage>& m_queue;
     SettleDetector m_detector;
     RuleEngine m_ruleEngine;
     std::filesystem::path m_watchDir;
