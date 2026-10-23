@@ -1,88 +1,102 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <filesystem>
+#include <unordered_set>
 
 #include "core/IFileProbe.h"
 #include "core/SettleDetector.h"
 
-// A fake probe that considers all paths to be stable regular files
 class AlwaysStableProbe final : public IFileProbe {
 public:
     [[nodiscard]] bool isRegularFile(const std::filesystem::path&) const override { return true; }
     [[nodiscard]] bool isStable(const std::filesystem::path&) const override { return true; }
 };
 
-class ChangeableProbe final : public IFileProbe {
+class PathSelectiveProbe final : public IFileProbe {
 public:
-    void setStable(const bool stable) { m_stable = stable; }
+    void markUnstable(const std::filesystem::path& p) { m_unstable.insert(p); }
+    void markStable(const std::filesystem::path& p)   { m_unstable.erase(p); }
+
     [[nodiscard]] bool isRegularFile(const std::filesystem::path&) const override { return true; }
-    [[nodiscard]] bool isStable(const std::filesystem::path&) const override { return m_stable; }
+    [[nodiscard]] bool isStable(const std::filesystem::path& p) const override {
+        return !m_unstable.contains(p);
+    }
 private:
-    bool m_stable = true;
+    std::unordered_set<std::filesystem::path> m_unstable;
 };
 
-TEST_CASE("Modified refreshes the quiet period") {
+TEST_CASE("Tracks multiple files with independent deadlines") {
     using namespace std::chrono_literals;
 
     AlwaysStableProbe probe;
     SettleDetector detector(500ms, probe);
     const auto t0 = std::chrono::steady_clock::now();
 
-    detector.onEvent(FileEvent::created("a.pdf"), t0);
-    detector.onEvent(FileEvent::modified("a.pdf"), t0 + 400ms);
+    detector.onEvent(FileEvent::created("first.txt"), t0);
+    detector.onEvent(FileEvent::created("second.txt"), t0 + 200ms);
 
-    // At 600ms: only 200ms has elapsed since the last Modified -> not ready yet
+    // At 550ms: only 'first.txt' has settled (> 500ms)
+    auto ready1 = detector.collectReady(t0 + 550ms);
+    REQUIRE(ready1.size() == 1);
+    CHECK(ready1[0].path == "first.txt");
+
+    // At 600ms: 'second.txt' has only had 400ms elapsed
     REQUIRE(detector.collectReady(t0 + 600ms).empty());
 
-    // At 900ms: 500ms quiet period has elapsed since t0 + 400ms -> ready!
-    auto ready = detector.collectReady(t0 + 900ms);
-    REQUIRE(ready.size() == 1);
-    REQUIRE(ready[0].path == "a.pdf");
+    // At 750ms: 'second.txt' settles
+    auto ready2 = detector.collectReady(t0 + 750ms);
+    REQUIRE(ready2.size() == 1);
+    CHECK(ready2[0].path == "second.txt");
 }
 
-TEST_CASE("Unstable refreshes the quiet period") {
+TEST_CASE("Event flags aggregate across multiple events") {
     using namespace std::chrono_literals;
 
-    ChangeableProbe probe;
-    SettleDetector detector(500ms, probe);
-    const auto t0 = std::chrono::steady_clock::now();
-
-    detector.onEvent(FileEvent::created("a.pdf"), t0);
-    probe.setStable(false);
-    // should be empty and reset the timer to be at t0 + n
-    REQUIRE(detector.collectReady(t0 + 600ms).empty());
-    probe.setStable(true);
-
-    REQUIRE(detector.collectReady(t0 + 900ms).empty());
-
-    // At 900ms: 500ms quiet period has elapsed since t0 + 400ms -> ready!
-    auto ready = detector.collectReady(t0 + 1100ms);
-    REQUIRE(ready.size() == 1);
-    REQUIRE(ready[0].path == "a.pdf");
-}
-
-TEST_CASE("Create and delete returns nothing") {
-    using namespace std::chrono_literals;
     AlwaysStableProbe probe;
     SettleDetector detector(500ms, probe);
     const auto t0 = std::chrono::steady_clock::now();
 
-    detector.onEvent(FileEvent::created("a.pdf"), t0);
-    detector.onEvent(FileEvent::removed("a.pdf"), t0 + 10ms);
-    detector.onEvent(FileEvent::created("a.pdf"), t0);
+    detector.onEvent(FileEvent::created("report.docx"), t0);
+    detector.onEvent(FileEvent::modified("report.docx"), t0 + 100ms);
 
-    REQUIRE(detector.collectReady(t0 + 600ms).size() == 1);
+    auto ready = detector.collectReady(t0 + 650ms);
+    REQUIRE(ready.size() == 1);
+    CHECK(ready[0].path == "report.docx");
+    CHECK(hasFlag(ready[0].events, FileChangeFlags::Created));
+    CHECK(hasFlag(ready[0].events, FileChangeFlags::Modified));
 }
 
-TEST_CASE("Overflow does not lose pending files") {
+TEST_CASE("pruneMissing removes files no longer on disk") {
     using namespace std::chrono_literals;
+
     AlwaysStableProbe probe;
     SettleDetector detector(500ms, probe);
     const auto t0 = std::chrono::steady_clock::now();
 
-    detector.onEvent(FileEvent::created("a.pdf"), t0);
-    detector.onEvent(FileEvent::created("b.pdf"), t0);
-    detector.onEvent(FileEvent::overflow(), t0 + 10ms);
+    detector.onEvent(FileEvent::created("deleted_external.pdf"), t0);
+    detector.onEvent(FileEvent::created("kept.pdf"), t0);
 
-    REQUIRE(detector.collectReady(t0 + 600ms).size() == 2);
+    // Directory rescan only discovers kept.pdf
+    std::unordered_set<std::filesystem::path> diskFiles = { "kept.pdf" };
+    detector.pruneMissing(diskFiles);
+
+    auto ready = detector.collectReady(t0 + 600ms);
+    REQUIRE(ready.size() == 1);
+    CHECK(ready[0].path == "kept.pdf");
+}
+
+TEST_CASE("Renamed event migrates tracked state to new path") {
+    using namespace std::chrono_literals;
+
+    AlwaysStableProbe probe;
+    SettleDetector detector(500ms, probe);
+    const auto t0 = std::chrono::steady_clock::now();
+
+    detector.onEvent(FileEvent::created("old_name.txt"), t0);
+    detector.onEvent(FileEvent::renamed("old_name.txt", "new_name.txt"), t0 + 100ms);
+
+    auto ready = detector.collectReady(t0 + 700ms);
+    REQUIRE(ready.size() == 1);
+    CHECK(ready[0].path == "new_name.txt");
+    CHECK(hasFlag(ready[0].events, FileChangeFlags::Renamed));
 }

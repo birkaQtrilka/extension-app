@@ -23,7 +23,6 @@ void SettleDetector::onEvent(const FileEvent& event, TimePoint now) {
             entry.accumulatedEvents |= FileChangeFlags::Renamed;
             break;
         }
-        // Notice: NO Overflow case needed here at all!
     }
 }
 

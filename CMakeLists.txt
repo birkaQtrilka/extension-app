@@ -17,7 +17,10 @@ configure_file(
         "${CMAKE_BINARY_DIR}/.env"
         COPYONLY
 )
+
 include(FetchContent)
+
+# 1. libcurl
 FetchContent_Declare(
         curl
         URL https://curl.se/download/curl-8.22.0.tar.xz
@@ -34,10 +37,8 @@ block()
     set(BUILD_SHARED_LIBS OFF)
     set(BUILD_STATIC_LIBS ON)
 
-    # Disable optional features whose dependencies aren't installed.
     set(CURL_USE_LIBPSL OFF)
 
-    # Use Windows' native TLS implementation.
     if(WIN32)
         set(CURL_USE_SCHANNEL ON)
     endif()
@@ -45,19 +46,17 @@ block()
     FetchContent_MakeAvailable(curl)
 endblock()
 
-# Catch2 v3 from GitHub
 FetchContent_Declare(
         Catch2
         GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-        GIT_TAG        v3.5.3 # Or latest v3 release
+        GIT_TAG        v3.5.3
 )
 FetchContent_MakeAvailable(Catch2)
-# json from GitHub
+
 FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz)
 FetchContent_MakeAvailable(json)
 
-
-add_executable(extension_app src/main.cpp
+add_library(app_core STATIC
         src/core/IAction.h
         src/core/IFolderWatcher.h
         src/core/FileEvent.h
@@ -91,23 +90,32 @@ add_executable(extension_app src/main.cpp
         src/actions/ActionFactory.h
         src/actions/ActionRegistry.h
 )
-target_include_directories(extension_app PRIVATE src)
 
-# 2. Add your test executable
-add_executable(unit_tests
-        tests/SettleDetectorTest.cpp
-        src/core/SettleDetector.cpp
-        # Add any other source files needed by the test
-)
-target_include_directories(unit_tests PRIVATE src tests)
-# 3. Link Catch2 (Catch2WithMain provides int main() automatically!)
-target_link_libraries(unit_tests PRIVATE Catch2::Catch2WithMain)
-target_link_libraries(extension_app PRIVATE
+target_include_directories(app_core PUBLIC src)
+target_link_libraries(app_core PUBLIC
         nlohmann_json::nlohmann_json
         CURL::libcurl
 )
 
-# 4. Enable test discovery in your IDE
+# Main Application
+add_executable(extension_app src/main.cpp)
+target_link_libraries(extension_app PRIVATE app_core)
+
+# Unit Tests
+add_executable(unit_tests
+        tests/SettleDetectorTest.cpp
+        tests/RuleEngineTest.cpp
+        tests/SettingsParserTest.cpp
+        tests/ActionsTest.cpp
+)
+
+target_include_directories(unit_tests PRIVATE tests)
+target_link_libraries(unit_tests PRIVATE
+        app_core
+        Catch2::Catch2WithMain
+)
+
+# Test Discovery
 include(CTest)
 include(Catch)
 catch_discover_tests(unit_tests)
