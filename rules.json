@@ -1,7 +1,7 @@
 [
   {
     "match": {
-      "patterns": ["*_tg.*"],
+      "patterns": ["*_tg*"],
       "events": ["Created", "Renamed", "Init"]
     },
     "actions": [

@@ -53,7 +53,7 @@ std::expected<AppConfig, std::string> SettingsParser::parse() const {
 
     AppConfig config;
     config.watchPath = std::filesystem::path(watch);
-    config.configPath = m_path;
+    config.configPath = rules;
 
     if (jsonConfig.contains("debounce_time_ms")) {
         if (!jsonConfig["debounce_time_ms"].is_number_unsigned() &&
