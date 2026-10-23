@@ -21,7 +21,7 @@ struct TempDirectoryFixture {
         fs::remove_all(tempDir, ec);
     }
 
-    fs::path createFile(const std::string& filename, const std::string& content = "dummy") {
+    [[nodiscard]] fs::path createFile(const std::string& filename, const std::string& content = "dummy") const {
         fs::path p = tempDir / filename;
         std::ofstream out(p);
         out << content;
@@ -32,7 +32,6 @@ struct TempDirectoryFixture {
 TEST_CASE_METHOD(TempDirectoryFixture, "RemovePatternAction renames file correctly on match") {
     auto filePath = createFile("invoice_COPY_2026.pdf");
 
-    // Remove "_COPY"
     RemovePatternAction action(std::regex("_COPY"));
     auto result = action.execute(filePath);
 

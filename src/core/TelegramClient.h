@@ -5,23 +5,20 @@
 #include <string>
 #include <string_view>
 #include <filesystem>
-#include <system_error>
-#include <bits/fs_path.h>
+#include "IMessageClient.h"
 
-class TelegramClient {
+class TelegramClient : public IMessageClient{
 public:
     TelegramClient(std::string botToken, std::string chatId);
-    ~TelegramClient();
-
     TelegramClient(const TelegramClient&) = delete;
     TelegramClient& operator=(const TelegramClient&) = delete;
 
     [[nodiscard]]
     std::expected<void, std::string>
-    sendMessage(std::string_view text) const;
+    sendMessage(std::string_view text) const override;
 
     [[nodiscard]] std::expected<void, std::string>
-    sendDocument(const std::filesystem::path& file) const;
+    sendDocument(const std::filesystem::path& file) const override;
 
 private:
     std::string m_botToken;

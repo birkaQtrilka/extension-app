@@ -89,6 +89,7 @@ add_library(app_core STATIC
         src/actions/ActionFactory.cpp
         src/actions/ActionFactory.h
         src/actions/ActionRegistry.h
+        src/core/IMessageClient.h
 )
 
 target_include_directories(app_core PUBLIC src)
@@ -107,6 +108,7 @@ add_executable(unit_tests
         tests/RuleEngineTest.cpp
         tests/SettingsParserTest.cpp
         tests/ActionsTest.cpp
+        tests/SendToTelegramActionTest.cpp
 )
 
 target_include_directories(unit_tests PRIVATE tests)

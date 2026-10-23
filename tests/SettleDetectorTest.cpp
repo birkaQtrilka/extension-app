@@ -35,15 +35,12 @@ TEST_CASE("Tracks multiple files with independent deadlines") {
     detector.onEvent(FileEvent::created("first.txt"), t0);
     detector.onEvent(FileEvent::created("second.txt"), t0 + 200ms);
 
-    // At 550ms: only 'first.txt' has settled (> 500ms)
     auto ready1 = detector.collectReady(t0 + 550ms);
     REQUIRE(ready1.size() == 1);
     CHECK(ready1[0].path == "first.txt");
 
-    // At 600ms: 'second.txt' has only had 400ms elapsed
     REQUIRE(detector.collectReady(t0 + 600ms).empty());
 
-    // At 750ms: 'second.txt' settles
     auto ready2 = detector.collectReady(t0 + 750ms);
     REQUIRE(ready2.size() == 1);
     CHECK(ready2[0].path == "second.txt");

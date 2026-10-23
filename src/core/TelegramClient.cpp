@@ -92,8 +92,6 @@ TelegramClient::TelegramClient(std::string botToken, std::string chatId)
       m_chatId(std::move(chatId)) {
 }
 
-TelegramClient::~TelegramClient() = default;
-
 std::expected<void, std::string>
 TelegramClient::sendMessage(std::string_view text) const {
     CurlHandle curl(curl_easy_init());

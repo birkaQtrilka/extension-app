@@ -21,7 +21,7 @@ enum class SendType {
 class SendToTelegramAction final : public IAction {
     static constexpr std::size_t kMaxMessageLength = 4096;     // Telegram limit per message
     static constexpr std::uintmax_t kMaxTextBytes = 256 * 1024; // refuse to spam huge files
-    std::shared_ptr<const TelegramClient> m_client;
+    std::shared_ptr<const IMessageClient> m_client;
     SendType m_type;
 
     static ActionResult fail(const std::filesystem::path& path, std::string message) {
@@ -85,7 +85,7 @@ class SendToTelegramAction final : public IAction {
     }
 
 public:
-    SendToTelegramAction(std::shared_ptr<const TelegramClient> client, const SendType type)
+    SendToTelegramAction(std::shared_ptr<const IMessageClient> client, const SendType type)
         : m_client(std::move(client)), m_type(type) {}
 
 
