@@ -486,17 +486,6 @@ The expected resulting filename is:
 report.pdf
 ```
 
-Another example:
-
-```json
-{
-  "type": "removePattern",
-  "pattern": "_draft|_temp"
-}
-```
-
-This matches `_draft` or `_temp` and removes matching occurrences according to the action's implementation.
-
 **Important:** Unlike rule patterns, the `pattern` property is a regular expression, not a wildcard expression. It is compiled without automatically adding start or end anchors, so matching is not restricted to the entire filename.
 
 Use care with broad expressions, as they may remove more text than intended.
@@ -765,4 +754,4 @@ Contributions are welcome. When adding a new action:
 
 ## License
 
-Add the license applicable to this repository here. If the project has not yet been licensed, choose and add a license before presenting the repository as open source.
+MIT License
