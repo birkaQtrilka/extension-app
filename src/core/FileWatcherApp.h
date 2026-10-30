@@ -91,7 +91,6 @@ public:
                 std::cerr << "Watcher terminated with error: " << expect.error() << '\n';
             }
 
-            // When watcher finishes, close the queue to release the consumer
             m_queue.close();
         });
 
@@ -106,9 +105,6 @@ public:
         m_producerThread.request_stop();
         m_consumerThread.request_stop();
 
-        // Close queue to wake up consumer if it is waiting in pop()
         m_queue.close();
-
-        // std::jthread members automatically join here when destroyed
     }
 };
