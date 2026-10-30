@@ -66,11 +66,9 @@ struct FileEvent {
         return FileChangeFlags::None;
     }
 };
-
-// Control message (no dummy paths!)
+// system control message
 struct BufferOverflow {};
 
-// Variant passed across threads
 using WatcherMessage = std::variant<FileEvent, BufferOverflow>;
 
 struct FileReady {
